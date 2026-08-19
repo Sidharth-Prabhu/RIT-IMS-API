@@ -1,222 +1,1090 @@
-# RIT IMS Data Retrieval Guide (`curl` via Netlify Proxy)
+# RIT IMS API Documentation
 
-This document outlines the correct, robust `curl` commands to fetch all student and academic data from your **Netlify deployed proxy**.
+**Base URL:** `https://ims-api.sidharthprabhu.co.in`
 
-When you deploy this site to Netlify, it uses Netlify Edge Functions (configured via [[edge-functions]](file:///Users/sidharth/development/IMS%20Test/ims-test/netlify.toml) and [`netlify/edge-functions/ims-proxy.ts`](file:///Users/sidharth/development/IMS%20Test/ims-test/netlify/edge-functions/ims-proxy.ts)) to proxy requests matching `/ims/*` to the real portal (`https://ims.ritchennai.edu.in`). Using the Netlify proxy endpoint is highly recommended to circumvent client CORS/SSL errors and match the production environment architecture.
+This API provides programmatic access to authenticated student
+information from the RIT IMS portal.
 
-Retrieving data via `curl` requires a multi-step sequence:
-1. **Initialize a session** and capture the initial CSRF token from the Netlify proxy.
-2. **Authenticate (Log in)** through the proxy to establish and bind session cookies.
-3. **Execute requests** against specific proxy paths using the active session cookie and CSRF headers.
+The API communicates server-side with:
 
----
+`https://ims.ritchennai.edu.in`
 
-## Prerequisites & State Management
+Clients do **not** need to manage the upstream RIT IMS cookies or CSRF
+token. The API handles the upstream IMS session internally and returns
+an API session token to the client.
 
-To run these requests sequentially, we will use a cookie jar (`cookies.txt`) to maintain session state across commands.
+------------------------------------------------------------------------
 
-### Environment Variables
-```bash
-export IMS_USER="YOUR_REGISTER_NUMBER"
-export IMS_PASS="YOUR_PASSWORD"
-export BASE_URL="https://ims-api.sidharthprabhu.co.in/ims"
+## 1. Architecture
+
+``` text
+Client / curl
+     |
+     | HTTPS
+     v
+https://ims-api.sidharthprabhu.co.in/api/*
+     |
+     | Netlify Edge Function: ims-api
+     v
+https://ims.ritchennai.edu.in
 ```
 
----
+The `/api/*` routes are handled by the `ims-api` Edge Function.
 
-## 1. Authentication Flow (Mandatory First Steps)
+The legacy `/ims/*` route is a separate proxy and should not be used for
+the new API authentication flow.
 
-### Step A: Initialize Session and Fetch CSRF Token
-First, fetch the login page via the proxy to acquire a valid session cookie and extract the `_token` (CSRF token) needed for authentication.
+------------------------------------------------------------------------
 
-```bash
-# 1. Fetch page, save cookies, and extract CSRF token
-CSRF_TOKEN=$(curl -s -S -c cookies.txt "$BASE_URL/login" \
-  -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" \
-  | grep -oE 'name="csrf-token" content="([^"]+)"' | cut -d'"' -f4)
+# 2. Authentication
 
-# Verify the token was found
-echo "CSRF Token: $CSRF_TOKEN"
+## POST `/api/auth/login`
+
+Authenticate against RIT IMS and create an API session.
+
+### Request
+
+``` http
+POST /api/auth/login
+Content-Type: application/json
 ```
 
-### Step B: Authenticate / Log In
-Submit the credentials alongside the CSRF token. This binds your session cookie in `cookies.txt` to the authenticated student profile.
+### Body
 
-```bash
-curl -s -S -b cookies.txt -c cookies.txt -L "$BASE_URL/login" \
+``` json
+{
+  "username": "YOUR_REGISTER_NUMBER",
+  "password": "YOUR_PASSWORD"
+}
+```
+
+### curl
+
+``` bash
+curl -s \
   -X POST \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -H "X-CSRF-TOKEN: $CSRF_TOKEN" \
-  -H "X-Requested-With: XMLHttpRequest" \
-  -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" \
-  --data-urlencode "_token=$CSRF_TOKEN" \
-  --data-urlencode "email=$IMS_USER" \
-  --data-urlencode "password=$IMS_PASS" \
-  -o /dev/null
-
-echo "Authentication request complete. Cookie jar 'cookies.txt' is now authenticated."
+  "https://ims-api.sidharthprabhu.co.in/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "YOUR_REGISTER_NUMBER",
+    "password": "YOUR_PASSWORD"
+  }'
 ```
 
----
+### Successful response
 
-## 2. Data Retrieval Endpoints
-
-Once authenticated, use the following `curl` commands to extract specific tables and views.
-
-### 2.1. Basic Student Info
-Scrapes the name and department of the logged-in student from the main report landing page.
-```bash
-curl -s -S -b cookies.txt "$BASE_URL/admin/grade/student/mark/report" \
-  -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" \
-  -o student_report.html
+``` json
+{
+  "success": true,
+  "message": "Authentication successful",
+  "session": "API_SESSION_TOKEN"
+}
 ```
 
-### 2.2. Detailed Student Profile
-Fetches the detailed student profile containing father's name, permanent address, contact details, quota, etc.
-```bash
-curl -s -S -b cookies.txt "$BASE_URL/admin/students/Profile-view" \
-  -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" \
-  -o student_profile.html
+The `session` value is an encrypted opaque API session token.
+
+Do not expose or log the user's IMS password.
+
+Do not expose the upstream IMS cookies or CSRF token.
+
+------------------------------------------------------------------------
+
+# 3. Using the API Session
+
+Send the returned session token using:
+
+``` http
+Authorization: Bearer API_SESSION_TOKEN
 ```
 
-### 2.3. Semester Results & Subject Grades (POST)
-Fetches published subject-wise grades, GPA, and credits for a specific semester (e.g., Semester 1, 2, 3, etc.).
-* Note: Replace `semester=1` with the desired semester number.
-```bash
-curl -s -S -b cookies.txt "$BASE_URL/admin/grade/student/mark/get_marks" \
+Example:
+
+``` bash
+API_TOKEN="YOUR_API_SESSION_TOKEN"
+
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "https://ims-api.sidharthprabhu.co.in/api/student/profile"
+```
+
+The API decrypts the token server-side and reconstructs the upstream IMS
+session.
+
+------------------------------------------------------------------------
+
+# 4. Logout
+
+## POST `/api/auth/logout`
+
+Invalidate the current API/IMS session.
+
+### curl
+
+``` bash
+curl -s \
   -X POST \
-  -H "Content-Type: application/x-www-form-urlencoded; charset=UTF-8" \
-  -H "X-CSRF-TOKEN: $CSRF_TOKEN" \
-  -H "X-Requested-With: XMLHttpRequest" \
-  -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" \
-  --data-urlencode "semester=1" \
-  -o semester_1_results.json
+  "https://ims-api.sidharthprabhu.co.in/api/auth/logout" \
+  -H "Authorization: Bearer $API_TOKEN"
 ```
 
-### 2.4. Continuous Assessment Test (CAT) Marks
-Retrieves internal test marks (CO-1, CO-2, Totals, Weightage) for active courses in the current semester.
-```bash
-curl -s -S -b cookies.txt "$BASE_URL/admin/student-cat-mark/report" \
-  -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" \
-  -o cat_marks.html
+### Response
+
+``` json
+{
+  "success": true,
+  "message": "Logged out successfully"
+}
 ```
 
-### 2.5. Assignment Marks
-Fetches the scores for assignments (A1 to A5) along with faculty names and totals.
-```bash
-curl -s -S -b cookies.txt "$BASE_URL/admin/assignment/student/mark/report" \
-  -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" \
-  -o assignment_marks.html
+------------------------------------------------------------------------
+
+# 5. Health Check
+
+## GET `/api/health`
+
+Unauthenticated endpoint for checking whether the API is responding.
+
+### curl
+
+``` bash
+curl -s \
+  "https://ims-api.sidharthprabhu.co.in/api/health"
 ```
 
-### 2.6. Academic Fee Breakdown & Pending Dues
-Fetches quota type, first graduate scholarship eligibility, and detailed fee records (Tuition fee, Hostel/Bus fee, AU Exam fee, reversals, paid vs. pending balance) as a clean JSON payload.
-```bash
-curl -s -S -b cookies.txt "$BASE_URL/admin/fee-payment/get-data" \
-  -H "X-CSRF-TOKEN: $CSRF_TOKEN" \
-  -H "X-Requested-With: XMLHttpRequest" \
-  -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" \
-  -o academic_fee.json
+### Response
+
+``` json
+{
+  "success": true,
+  "status": "ok"
+}
 ```
 
-### 2.7. Attendance Report
-Retrieves course-wise attendance stats (Attended hours, Total conducted hours, Percentage) and faculty info.
-```bash
-curl -s -S -b cookies.txt "$BASE_URL/admin/student-personal-attendance/report" \
-  -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" \
-  -o attendance.html
+The response must be JSON. If this endpoint returns the frontend
+`index.html`, the Netlify `/api/*` Edge Function routing is not working
+correctly.
+
+------------------------------------------------------------------------
+
+# 6. Upstream IMS Health Check
+
+## GET `/api/health/upstream`
+
+Checks whether the RIT IMS portal is reachable.
+
+### curl
+
+``` bash
+curl -s \
+  "https://ims-api.sidharthprabhu.co.in/api/health/upstream"
 ```
 
-### 2.8. Weekly Class Timetable
-Extracts the scheduled periods, faculty initials, and subject codes by day (Monday to Saturday).
-```bash
-curl -s -S -b cookies.txt "$BASE_URL/admin/student-time-table" \
-  -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" \
-  -o timetable.html
+### Example response
+
+``` json
+{
+  "success": true,
+  "api": "ok",
+  "upstream_ims": "reachable"
+}
 ```
 
-### 2.9. Leaves & On-Duty (OD) Request History
-Scrapes the history of leave/OD requests, status checks (Approved/Rejected/Pending), and dates.
-```bash
-curl -s -S -b cookies.txt "$BASE_URL/admin/student-request-leaves/index" \
-  -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" \
-  -o leaves_history.html
+------------------------------------------------------------------------
+
+# 7. Semester Results / Marks
+
+## GET `/api/student/results`
+
+Fetch semester marks for the authenticated student.
+
+### Query parameter
+
+  Parameter    Required   Description
+  ------------ ---------- -----------------------------
+  `semester`   Yes        Semester number from 1 to 8
+
+### Example
+
+``` text
+GET /api/student/results?semester=1
 ```
 
----
+### curl
 
-## 3. Automation Script (`fetch_all.sh`)
+``` bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "https://ims-api.sidharthprabhu.co.in/api/student/results?semester=1"
+```
 
-To make data collection as robust as possible, save the following code snippet into a script named `fetch_all.sh` to fetch all variables via your Netlify proxy in one click:
+### Semester 2
 
-```bash
-#!/bin/bash
-set -e
+``` bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "https://ims-api.sidharthprabhu.co.in/api/student/results?semester=2"
+```
 
-# Config
-# Replace with: https://ims-api.sidharthprabhu.co.in/ims
-COOKIE_FILE="cookies.txt"
-OUTPUT_DIR="./ims_raw_data"
-mkdir -p "$OUTPUT_DIR"
+### Semester 3
 
-if [ -z "$IMS_USER" ] || [ -z "$IMS_PASS" ] || [ -z "$BASE_URL" ]; then
-  echo "Error: Please set IMS_USER, IMS_PASS, and BASE_URL (ending in /ims) environment variables."
-  exit 1
-fi
+``` bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "https://ims-api.sidharthprabhu.co.in/api/student/results?semester=3"
+```
 
-echo "[*] Step 1: Initializing session & fetching CSRF token..."
-CSRF_TOKEN=$(curl -s -S -c "$COOKIE_FILE" "$BASE_URL/login" \
-  -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" \
-  | grep -oE 'name="csrf-token" content="([^"]+)"' | cut -d'"' -f4)
+### Successful response
 
-if [ -z "$CSRF_TOKEN" ]; then
-  echo "[-] Error: Failed to extract CSRF token."
-  exit 1
-fi
-echo "[+] Got CSRF Token: $CSRF_TOKEN"
+The API normalizes the upstream response into:
 
-echo "[*] Step 2: Logging in..."
-curl -s -S -b "$COOKIE_FILE" -c "$COOKIE_FILE" -L "$BASE_URL/login" \
+``` json
+{
+  "success": true,
+  "semester": 1,
+  "data": [
+    {
+      "course_code": "CS1234",
+      "course_name": "Data Structures",
+      "internal_mark": 40,
+      "external_mark": 55,
+      "total_mark": 95,
+      "grade": "A",
+      "result": "PASS"
+    }
+  ]
+}
+```
+
+The exact values depend on the student's actual IMS data.
+
+### Upstream request
+
+The API internally calls:
+
+``` http
+POST https://ims.ritchennai.edu.in/admin/grade/student/mark/get_marks
+```
+
+with:
+
+``` text
+semester=1
+```
+
+The upstream IMS cookies and CSRF token are handled server-side.
+
+------------------------------------------------------------------------
+
+# 8. Alternative POST Results Request
+
+The results endpoint also accepts POST.
+
+## POST `/api/student/results`
+
+### Request
+
+``` http
+POST /api/student/results
+Authorization: Bearer API_SESSION_TOKEN
+Content-Type: application/json
+```
+
+### Body
+
+``` json
+{
+  "semester": 1
+}
+```
+
+### curl
+
+``` bash
+curl -s \
   -X POST \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -H "X-CSRF-TOKEN: $CSRF_TOKEN" \
-  -H "X-Requested-With: XMLHttpRequest" \
-  -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" \
-  --data-urlencode "_token=$CSRF_TOKEN" \
-  --data-urlencode "email=$IMS_USER" \
-  --data-urlencode "password=$IMS_PASS" \
-  -o /dev/null
-
-echo "[+] Logged in successfully."
-
-echo "[*] Step 3: Fetching Academic Data..."
-
-# Fetch HTML/JSON items
-curl -s -S -b "$COOKIE_FILE" "$BASE_URL/admin/grade/student/mark/report" -o "$OUTPUT_DIR/report.html"
-curl -s -S -b "$COOKIE_FILE" "$BASE_URL/admin/students/Profile-view" -o "$OUTPUT_DIR/profile.html"
-curl -s -S -b "$COOKIE_FILE" "$BASE_URL/admin/student-cat-mark/report" -o "$OUTPUT_DIR/cat_marks.html"
-curl -s -S -b "$COOKIE_FILE" "$BASE_URL/admin/assignment/student/mark/report" -o "$OUTPUT_DIR/assignments.html"
-curl -s -S -b "$COOKIE_FILE" "$BASE_URL/admin/student-personal-attendance/report" -o "$OUTPUT_DIR/attendance.html"
-curl -s -S -b "$COOKIE_FILE" "$BASE_URL/admin/student-time-table" -o "$OUTPUT_DIR/timetable.html"
-curl -s -S -b "$COOKIE_FILE" "$BASE_URL/admin/student-request-leaves/index" -o "$OUTPUT_DIR/leaves.html"
-
-# Fetch JSON Fee Data
-curl -s -S -b "$COOKIE_FILE" "$BASE_URL/admin/fee-payment/get-data" \
-  -H "X-CSRF-TOKEN: $CSRF_TOKEN" \
-  -H "X-Requested-With: XMLHttpRequest" \
-  -o "$OUTPUT_DIR/fee_data.json"
-
-# Fetch Grades for Semester 1 to 8
-for sem in {1..8}; do
-  echo "[*] Fetching Semester $sem marks..."
-  curl -s -S -b "$COOKIE_FILE" "$BASE_URL/admin/grade/student/mark/get_marks" \
-    -X POST \
-    -H "Content-Type: application/x-www-form-urlencoded; charset=UTF-8" \
-    -H "X-CSRF-TOKEN: $CSRF_TOKEN" \
-    -H "X-Requested-With: XMLHttpRequest" \
-    --data-urlencode "semester=$sem" \
-    -o "$OUTPUT_DIR/semester_${sem}_marks.json"
-done
-
-echo "[+] Done! All raw documents saved to folder: $OUTPUT_DIR"
+  "https://ims-api.sidharthprabhu.co.in/api/student/results" \
+  -H "Authorization: Bearer $API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "semester": 1
+  }'
 ```
+
+GET is recommended for simple read-only retrieval.
+
+------------------------------------------------------------------------
+
+# 9. Student Profile
+
+## GET `/api/student/profile`
+
+Fetch the authenticated student's basic profile information.
+
+### curl
+
+``` bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "https://ims-api.sidharthprabhu.co.in/api/student/profile"
+```
+
+### Response
+
+``` json
+{
+  "success": true,
+  "data": {
+    "name": "Student Name",
+    "register_number": "123456789",
+    "department": "Artificial Intelligence and Data Science",
+    "batch": "2024-2028"
+  }
+}
+```
+
+------------------------------------------------------------------------
+
+# 10. Attendance
+
+## GET `/api/student/attendance`
+
+Fetch the student's attendance.
+
+### curl
+
+``` bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "https://ims-api.sidharthprabhu.co.in/api/student/attendance"
+```
+
+### Response format
+
+``` json
+{
+  "success": true,
+  "data": {
+    "subjects": [
+      {
+        "code": "CS1234",
+        "name": "Subject Name",
+        "conducted": 40,
+        "present": 36,
+        "absent": 4,
+        "percentage": 90
+      }
+    ]
+  }
+}
+```
+
+------------------------------------------------------------------------
+
+# 11. Timetable
+
+## GET `/api/student/timetable`
+
+Fetch the student's timetable.
+
+### curl
+
+``` bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "https://ims-api.sidharthprabhu.co.in/api/student/timetable"
+```
+
+### Response structure
+
+``` json
+{
+  "success": true,
+  "data": {
+    "schedule": {
+      "monday": {},
+      "tuesday": {},
+      "wednesday": {},
+      "thursday": {},
+      "friday": {},
+      "saturday": {}
+    }
+  }
+}
+```
+
+The actual schedule contents depend on the student's IMS data.
+
+------------------------------------------------------------------------
+
+# 12. CAT Marks
+
+## GET `/api/student/cat-marks`
+
+Fetch CAT/internal examination marks.
+
+### curl
+
+``` bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "https://ims-api.sidharthprabhu.co.in/api/student/cat-marks"
+```
+
+### Response format
+
+``` json
+{
+  "success": true,
+  "data": {
+    "subjects": [
+      {
+        "code": "CS1234",
+        "name": "Subject Name",
+        "co1": "20",
+        "co2": "18",
+        "total": "38",
+        "weightage": "19"
+      }
+    ]
+  }
+}
+```
+
+------------------------------------------------------------------------
+
+# 13. Assignment Marks
+
+## GET `/api/student/assignment-marks`
+
+Fetch assignment marks.
+
+### curl
+
+``` bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "https://ims-api.sidharthprabhu.co.in/api/student/assignment-marks"
+```
+
+### Response format
+
+``` json
+{
+  "success": true,
+  "data": {
+    "subjects": [
+      {
+        "code": "CS1234",
+        "name": "Subject Name",
+        "a1": "10",
+        "a2": "9",
+        "a3": "10",
+        "a4": "8",
+        "a5": "10",
+        "total": "47"
+      }
+    ]
+  }
+}
+```
+
+------------------------------------------------------------------------
+
+# 14. Leave History
+
+## GET `/api/student/leaves`
+
+Fetch leave history.
+
+### curl
+
+``` bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "https://ims-api.sidharthprabhu.co.in/api/student/leaves"
+```
+
+### Response format
+
+``` json
+{
+  "success": true,
+  "data": {
+    "leaves": [
+      {
+        "type": "Leave",
+        "fromDate": "2026-08-01",
+        "toDate": "2026-08-02",
+        "noOfDays": "2",
+        "reason": "Personal",
+        "status": "Approved"
+      }
+    ]
+  }
+}
+```
+
+------------------------------------------------------------------------
+
+# 15. Academic Fees
+
+## GET `/api/student/fees`
+
+Fetch academic fee information.
+
+### curl
+
+``` bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "https://ims-api.sidharthprabhu.co.in/api/student/fees"
+```
+
+### Response structure
+
+``` json
+{
+  "success": true,
+  "data": {
+    "total_fee": 100000,
+    "paid": 80000,
+    "pending": 20000,
+    "transactions": []
+  }
+}
+```
+
+------------------------------------------------------------------------
+
+# 16. Complete curl Workflow
+
+The following is the recommended complete Bash workflow.
+
+## Step 1 --- Set API URL
+
+``` bash
+BASE_URL="https://ims-api.sidharthprabhu.co.in"
+```
+
+## Step 2 --- Authenticate
+
+``` bash
+LOGIN_RESPONSE=$(curl -s \
+  -X POST \
+  "$BASE_URL/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "YOUR_REGISTER_NUMBER",
+    "password": "YOUR_PASSWORD"
+  }')
+```
+
+## Step 3 --- Inspect login response
+
+``` bash
+echo "$LOGIN_RESPONSE" | jq .
+```
+
+## Step 4 --- Extract API session
+
+``` bash
+API_TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.session')
+```
+
+Verify:
+
+``` bash
+echo "$API_TOKEN"
+```
+
+## Step 5 --- Fetch semester marks
+
+``` bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/results?semester=1" | jq .
+```
+
+## Step 6 --- Fetch another semester
+
+``` bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/results?semester=2" | jq .
+```
+
+## Step 7 --- Logout
+
+``` bash
+curl -s \
+  -X POST \
+  "$BASE_URL/api/auth/logout" \
+  -H "Authorization: Bearer $API_TOKEN" | jq .
+```
+
+------------------------------------------------------------------------
+
+# 17. One-Line Semester Marks Command
+
+Authenticate and immediately fetch Semester 1:
+
+``` bash
+BASE_URL="https://ims-api.sidharthprabhu.co.in"; API_TOKEN=$(curl -s -X POST "$BASE_URL/api/auth/login" -H "Content-Type: application/json" -d '{"username":"YOUR_REGISTER_NUMBER","password":"YOUR_PASSWORD"}' | jq -r '.session'); curl -s -H "Authorization: Bearer $API_TOKEN" "$BASE_URL/api/student/results?semester=1" | jq .
+```
+
+------------------------------------------------------------------------
+
+# 18. Windows PowerShell
+
+## Login
+
+``` powershell
+$BaseUrl = "https://ims-api.sidharthprabhu.co.in"
+
+$Body = @{
+    username = "YOUR_REGISTER_NUMBER"
+    password = "YOUR_PASSWORD"
+} | ConvertTo-Json
+
+$Login = curl.exe -s `
+    -X POST `
+    "$BaseUrl/api/auth/login" `
+    -H "Content-Type: application/json" `
+    -d $Body
+
+$Login
+```
+
+Extract token:
+
+``` powershell
+$ApiToken = ($Login | ConvertFrom-Json).session
+```
+
+Fetch semester marks:
+
+``` powershell
+curl.exe -s `
+    -H "Authorization: Bearer $ApiToken" `
+    "$BaseUrl/api/student/results?semester=1"
+```
+
+------------------------------------------------------------------------
+
+# 19. Windows CMD
+
+Login:
+
+``` cmd
+curl -s -X POST "https://ims-api.sidharthprabhu.co.in/api/auth/login" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"username\":\"YOUR_REGISTER_NUMBER\",\"password\":\"YOUR_PASSWORD\"}"
+```
+
+Copy the `session` value from the response and set:
+
+``` cmd
+set API_TOKEN=YOUR_API_SESSION_TOKEN
+```
+
+Fetch semester marks:
+
+``` cmd
+curl -s ^
+  -H "Authorization: Bearer %API_TOKEN%" ^
+  "https://ims-api.sidharthprabhu.co.in/api/student/results?semester=1"
+```
+
+------------------------------------------------------------------------
+
+# 20. HTTP Status Codes
+
+    Status Meaning
+  -------- ----------------------------------------
+       200 Successful request
+       400 Invalid request
+       401 Missing/invalid/expired authentication
+       404 API endpoint not found
+       429 Rate limit exceeded
+       502 Upstream IMS failure
+       500 Internal API error
+
+------------------------------------------------------------------------
+
+# 21. Error Format
+
+API errors use:
+
+``` json
+{
+  "success": false,
+  "error": "ERROR_CODE",
+  "message": "Human-readable description"
+}
+```
+
+## Invalid credentials
+
+``` json
+{
+  "success": false,
+  "error": "INVALID_CREDENTIALS",
+  "message": "The IMS username or password is incorrect."
+}
+```
+
+HTTP status:
+
+``` text
+401
+```
+
+## Missing authentication
+
+``` json
+{
+  "success": false,
+  "error": "UNAUTHORIZED",
+  "message": "Missing or invalid Authorization header."
+}
+```
+
+HTTP status:
+
+``` text
+401
+```
+
+## Expired IMS session
+
+``` json
+{
+  "success": false,
+  "error": "IMS_SESSION_EXPIRED",
+  "message": "The upstream IMS session has expired. Please authenticate again."
+}
+```
+
+HTTP status:
+
+``` text
+401
+```
+
+## Invalid semester
+
+``` json
+{
+  "success": false,
+  "error": "INVALID_SEMESTER",
+  "message": "Semester must be a valid integer between 1 and 8."
+}
+```
+
+HTTP status:
+
+``` text
+400
+```
+
+------------------------------------------------------------------------
+
+# 22. Authentication Flow
+
+The server performs the following process.
+
+``` text
+POST /api/auth/login
+       |
+       v
+GET RIT IMS /login
+       |
+       +-- obtain session cookies
+       |
+       +-- extract CSRF token
+       |
+       v
+POST RIT IMS /login
+       |
+       +-- username
+       +-- password
+       +-- CSRF token
+       |
+       v
+Verify authenticated IMS page
+       |
+       +-- obtain authenticated cookies
+       +-- obtain authenticated CSRF token
+       |
+       v
+Create encrypted API session token
+       |
+       v
+Return token to client
+```
+
+Subsequent requests:
+
+``` text
+Authorization: Bearer <API_TOKEN>
+       |
+       v
+Decrypt API session
+       |
+       +-- IMS cookies
+       +-- IMS CSRF token
+       |
+       v
+Request RIT IMS
+       |
+       v
+Parse response
+       |
+       v
+Return JSON
+```
+
+------------------------------------------------------------------------
+
+# 23. Important Client-Side Rules
+
+Clients should **not**:
+
+-   request `/ims/*` for normal API usage
+-   send the upstream `laravel_session` cookie manually
+-   send the upstream `XSRF-TOKEN` manually
+-   send the upstream CSRF token
+-   submit credentials directly to `ims.ritchennai.edu.in`
+-   follow upstream IMS redirects themselves
+
+Clients should only communicate with:
+
+``` text
+https://ims-api.sidharthprabhu.co.in/api/*
+```
+
+and use:
+
+``` http
+Authorization: Bearer <API_TOKEN>
+```
+
+------------------------------------------------------------------------
+
+# 24. Security
+
+The API handles sensitive student authentication and academic
+information.
+
+Never log:
+
+-   IMS passwords
+-   API bearer tokens
+-   upstream cookies
+-   upstream CSRF tokens
+-   unnecessary student academic information
+
+Use HTTPS only.
+
+Apply rate limiting to login and authenticated endpoints.
+
+Do not create arbitrary upstream URL forwarding.
+
+Do not turn the service into an open proxy.
+
+Authenticated student data should not be publicly cached.
+
+Responses containing student information should use:
+
+``` http
+Cache-Control: no-store
+```
+
+------------------------------------------------------------------------
+
+# 25. API Endpoint Summary
+
+  Method   Endpoint                            Auth
+  -------- ----------------------------------- ------
+  GET      `/api/health`                       No
+  GET      `/api/health/upstream`              No
+  POST     `/api/auth/login`                   No
+  POST     `/api/auth/logout`                  Yes
+  GET      `/api/student/profile`              Yes
+  GET      `/api/student/attendance`           Yes
+  GET      `/api/student/timetable`            Yes
+  GET      `/api/student/cat-marks`            Yes
+  GET      `/api/student/assignment-marks`     Yes
+  GET      `/api/student/leaves`               Yes
+  GET      `/api/student/results?semester=N`   Yes
+  POST     `/api/student/results`              Yes
+  GET      `/api/student/fees`                 Yes
+
+------------------------------------------------------------------------
+
+# 26. Quick Reference
+
+``` bash
+# Base URL
+BASE_URL="https://ims-api.sidharthprabhu.co.in"
+
+# Health
+curl -s "$BASE_URL/api/health"
+
+# Login
+LOGIN=$(curl -s -X POST "$BASE_URL/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"YOUR_REGISTER_NUMBER","password":"YOUR_PASSWORD"}')
+
+# Token
+API_TOKEN=$(echo "$LOGIN" | jq -r '.session')
+
+# Semester 1
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/results?semester=1" | jq .
+
+# Semester 2
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/results?semester=2" | jq .
+
+# Profile
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/profile" | jq .
+
+# Attendance
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/attendance" | jq .
+
+# Timetable
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/timetable" | jq .
+
+# CAT marks
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/cat-marks" | jq .
+
+# Assignment marks
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/assignment-marks" | jq .
+
+# Leaves
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/leaves" | jq .
+
+# Fees
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/fees" | jq .
+
+# Logout
+curl -s -X POST \
+  "$BASE_URL/api/auth/logout" \
+  -H "Authorization: Bearer $API_TOKEN" | jq .
+```
+
+------------------------------------------------------------------------
+
+# 27. Troubleshooting
+
+## `/api/health` returns HTML
+
+Expected:
+
+``` json
+{
+  "success": true,
+  "status": "ok"
+}
+```
+
+If instead the response contains:
+
+``` html
+<title>ims-test</title>
+```
+
+the request is reaching the frontend SPA rather than the `ims-api` Edge
+Function.
+
+Fix the Netlify `/api/*` routing before testing authentication.
+
+## Login returns 404
+
+Check that:
+
+``` text
+/api/auth/login
+```
+
+is being routed to the `ims-api` Edge Function.
+
+## Results return `IMS_SESSION_EXPIRED`
+
+The API successfully reached the function but the upstream IMS session
+is no longer valid.
+
+Authenticate again.
+
+## Results return `UPSTREAM_ERROR`
+
+The API reached the upstream IMS but could not parse the response as
+expected. Inspect the upstream response structure before changing the
+parser.
+
+## Results return the IMS login HTML
+
+The upstream session was not preserved or has expired. The API must
+detect this and return `401 IMS_SESSION_EXPIRED` rather than returning
+the login HTML.
+
+------------------------------------------------------------------------
+
+# 28. Production Verification
+
+Before considering the API production-ready, verify the following in
+order:
+
+``` bash
+curl -i "$BASE_URL/api/health"
+```
+
+Must return JSON.
+
+Then:
+
+``` bash
+curl -i "$BASE_URL/api/health/upstream"
+```
+
+Must return JSON.
+
+Then:
+
+``` bash
+curl -i -X POST "$BASE_URL/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"YOUR_REGISTER_NUMBER","password":"YOUR_PASSWORD"}'
+```
+
+Must return an API session.
+
+Then:
+
+``` bash
+curl -i \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/results?semester=1"
+```
+
+Must return JSON containing semester results.
+
+The client must never receive the upstream IMS login HTML during a
+normal API request.
