@@ -47,10 +47,12 @@ export async function loginIms(username: string, password: string): Promise<{ st
 
   // Step 1: Get CSRF token
   let csrfToken = '';
+  let res: Response | null = null;
+  let html = '';
   try {
-    const res = await fetch('/ims/login', { credentials: 'same-origin' });
+    res = await fetch('/ims/login', { credentials: 'same-origin' });
     if (!res.ok) throw new Error(`HTTP ${res.status} fetching login page`);
-    const html = await res.text();
+    html = await res.text();
     const doc = new DOMParser().parseFromString(html, 'text/html');
     csrfToken = doc.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
     if (!csrfToken) {
@@ -61,7 +63,7 @@ export async function loginIms(username: string, password: string): Promise<{ st
   }
 
   if (!csrfToken) {
-    throw new Error('Could not initialize connection to RIT IMS. Please check your network connection.');
+    throw new Error(`Could not retrieve CSRF token. Server response code: ${res ? res.status : 'None'}. Preview: ${html ? html.slice(0, 200).replace(/[\r\n]+/g, ' ') : 'Empty response'}`);
   }
 
   // Step 2: Login
