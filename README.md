@@ -2,6 +2,190 @@
 
 **Base URL:** `https://ims-api.sidharthprabhu.co.in`
 
+## Quick Start with curl
+
+The API is designed to be usable directly from the command line. You do not need a browser, frontend application, or the upstream IMS cookies.
+
+### 1. Set the API URL
+
+```bash
+BASE_URL="https://ims-api.sidharthprabhu.co.in"
+```
+
+### 2. Log in
+
+```bash
+LOGIN_RESPONSE=$(curl -s \
+  -X POST \
+  "$BASE_URL/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "YOUR_REGISTER_NUMBER",
+    "password": "YOUR_PASSWORD"
+  }')
+
+echo "$LOGIN_RESPONSE"
+```
+
+Expected response:
+
+```json
+{
+  "success": true,
+  "message": "Authentication successful",
+  "session": "YOUR_API_SESSION_TOKEN"
+}
+```
+
+### 3. Extract the session token
+
+If `jq` is installed:
+
+```bash
+API_TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.session')
+```
+
+Check that it was extracted:
+
+```bash
+echo "$API_TOKEN"
+```
+
+Do not share the token. It represents your authenticated API session.
+
+### 4. Fetch Semester 1 marks
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/results?semester=1"
+```
+
+For formatted JSON:
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/results?semester=1" | jq .
+```
+
+### 5. Fetch another semester
+
+Change the `semester` value:
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/results?semester=2" | jq .
+```
+
+Valid semester values are `1` through `8`.
+
+### 6. Fetch other student information
+
+Profile:
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/profile" | jq .
+```
+
+Attendance:
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/attendance" | jq .
+```
+
+Timetable:
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/timetable" | jq .
+```
+
+CAT marks:
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/cat-marks" | jq .
+```
+
+Assignment marks:
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/assignment-marks" | jq .
+```
+
+Leave history:
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/leaves" | jq .
+```
+
+Academic fees:
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/fees" | jq .
+```
+
+### 7. Log out
+
+```bash
+curl -s \
+  -X POST \
+  "$BASE_URL/api/auth/logout" \
+  -H "Authorization: Bearer $API_TOKEN" | jq .
+```
+
+### Complete example
+
+```bash
+BASE_URL="https://ims-api.sidharthprabhu.co.in"
+
+LOGIN_RESPONSE=$(curl -s \
+  -X POST \
+  "$BASE_URL/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "YOUR_REGISTER_NUMBER",
+    "password": "YOUR_PASSWORD"
+  }')
+
+API_TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.session')
+
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/results?semester=1" | jq .
+```
+
+This is the recommended basic workflow:
+
+```text
+Login
+  ↓
+Receive API session token
+  ↓
+Send token in Authorization header
+  ↓
+Call student endpoints
+  ↓
+Receive JSON
+  ↓
+Logout when finished
+```
+
+
 This API provides programmatic access to authenticated student
 information from the RIT IMS portal.
 
