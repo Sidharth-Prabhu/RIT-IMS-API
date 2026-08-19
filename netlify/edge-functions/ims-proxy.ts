@@ -6,7 +6,22 @@ export const config: Config = {
 
 export default async (request: Request, context: Context) => {
   const url = new URL(request.url);
+  const origin = request.headers.get("origin") || "*";
   
+  // Handle HTTP OPTIONS preflight request
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, X-CSRF-TOKEN, X-Requested-With, Cookie, Authorization",
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Max-Age": "86400",
+      },
+    });
+  }
+
   // Rewrite path: /ims/foo -> /foo
   const targetPath = url.pathname.replace(/^\/ims/, "");
   // If targetPath is empty, default to /
@@ -82,6 +97,12 @@ export default async (request: Request, context: Context) => {
       }
     }
 
+    // 3. Add CORS headers for API accessibility
+    newHeaders.set("Access-Control-Allow-Origin", origin);
+    newHeaders.set("Access-Control-Allow-Credentials", "true");
+    newHeaders.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    newHeaders.set("Access-Control-Allow-Headers", "Content-Type, X-CSRF-TOKEN, X-Requested-With, Cookie, Authorization");
+
     return new Response(response.body, {
       status: response.status,
       statusText: response.statusText,
@@ -89,6 +110,14 @@ export default async (request: Request, context: Context) => {
     });
   } catch (error: any) {
     console.error("Proxy error:", error);
-    return new Response(`Proxy error: ${error.message}`, { status: 502 });
+    
+    const errHeaders = new Headers();
+    errHeaders.set("Access-Control-Allow-Origin", origin);
+    errHeaders.set("Access-Control-Allow-Credentials", "true");
+    
+    return new Response(`Proxy error: ${error.message}`, { 
+      status: 502,
+      headers: errHeaders
+    });
   }
 };
