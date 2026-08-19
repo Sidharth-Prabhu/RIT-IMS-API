@@ -338,6 +338,60 @@ export default async (request: Request, context: Context) => {
     return jsonResponse({ success: true, message: "Logged out successfully" }, 200, corsHeaders);
   }
 
+  // 4.1. Student Dashboard Metrics Endpoint
+  if (path === "/api/student/dashboard" && request.method === "GET") {
+    const { html, error } = await fetchUpstream("/admin");
+    if (error) return error;
+
+    const adminDoc = parse(html);
+    const dashboardStats = { cgpa: "N/A", arrears: "N/A", attendance: "N/A", pendingFees: "N/A" };
+
+    const extractMetric = (labelRegex: RegExp, valueRegex: RegExp): string => {
+      const elements = adminDoc.querySelectorAll("p, span, h3, h4, h1, td, th, b, strong, li, div");
+      for (const el of elements) {
+        const text = (el.textContent || "").trim();
+        if (labelRegex.test(text) && text.length < 50) {
+          // Check immediate siblings
+          let sibling = el.nextElementSibling;
+          while (sibling) {
+            const sibText = (sibling.textContent || "").trim();
+            const match = sibText.match(valueRegex);
+            if (match) return match[1] || match[0];
+            sibling = sibling.nextElementSibling;
+          }
+          sibling = el.previousElementSibling;
+          while (sibling) {
+            const sibText = (sibling.textContent || "").trim();
+            const match = sibText.match(valueRegex);
+            if (match) return match[1] || match[0];
+            sibling = sibling.previousElementSibling;
+          }
+          
+          // Check direct parent wrapper
+          const parent = el.parentElement;
+          if (parent) {
+            const parentText = (parent.textContent || "").trim();
+            const cleanParentText = parentText.replace(text, "");
+            const match = cleanParentText.match(valueRegex);
+            if (match) return match[1] || match[0];
+          }
+        }
+      }
+      return "N/A";
+    };
+
+    dashboardStats.cgpa = extractMetric(/\bCGPA\b/i, /(\d+\.\d+)/);
+    dashboardStats.arrears = extractMetric(/\barrears?\b/i, /\b(\d+)\b/);
+    dashboardStats.attendance = extractMetric(/\battendance\b/i, /(\d+(?:\.\d+)?\s*%)/) || extractMetric(/\battendance\b/i, /(\d+(?:\.\d+)?)/);
+    dashboardStats.pendingFees = extractMetric(/(?:pending|due|balance|academic)\s*fees?/i, /(?:Rs\.?|₹)\s*([\d,]+)/) || 
+                                 extractMetric(/(?:pending|due|balance|academic)\s*fees?/i, /\b([\d,]+)\b/);
+
+    return jsonResponse({
+      success: true,
+      data: dashboardStats
+    }, 200, corsHeaders);
+  }
+
   // 5. Student Profile Endpoint
   if (path === "/api/student/profile" && request.method === "GET") {
     const { html, error } = await fetchUpstream("/admin/students/Profile-view");
