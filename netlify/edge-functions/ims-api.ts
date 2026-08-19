@@ -704,6 +704,46 @@ export default async (request: Request, context: Context) => {
     return jsonResponse({ success: true, data: { leaves } }, 200, corsHeaders);
   }
 
+  // 10.2. Results PDF Download Endpoint
+  if (path === "/api/student/results/download" && request.method === "GET") {
+    const semesterStr = url.searchParams.get("semester") || "";
+    const semester = parseInt(semesterStr, 10);
+    if (isNaN(semester) || semester < 1 || semester > 8) {
+      return errorResponse("INVALID_SEMESTER", "Semester must be a valid integer between 1 and 8.", 400);
+    }
+
+    const headers = getUpstreamHeaders(session.cookies);
+    try {
+      const pdfRes = await fetch(`https://ims.ritchennai.edu.in/admin/grade/student/mark/report/download/${semester}`, {
+        method: "GET",
+        headers
+      });
+
+      if (!pdfRes.ok) {
+        return errorResponse("UPSTREAM_ERROR", `Upstream returned status ${pdfRes.status}`, 502);
+      }
+
+      if (pdfRes.url.includes("/login")) {
+        return errorResponse("IMS_SESSION_EXPIRED", "The upstream IMS session has expired. Please authenticate again.", 401);
+      }
+
+      const pdfBuffer = await pdfRes.arrayBuffer();
+
+      const resHeaders = new Headers(corsHeaders);
+      resHeaders.set("Content-Type", "application/pdf");
+      resHeaders.set("Content-Disposition", `attachment; filename="semester_${semester}_results.pdf"`);
+      resHeaders.set("Cache-Control", "no-store");
+
+      return new Response(pdfBuffer, {
+        status: 200,
+        headers: resHeaders
+      });
+
+    } catch (err: any) {
+      return errorResponse("UPSTREAM_UNAVAILABLE", `Failed to retrieve PDF: ${err.message}`, 502);
+    }
+  }
+
   // 11. Results Endpoint
   if (path === "/api/student/results" && (request.method === "GET" || request.method === "POST")) {
     let semesterStr = "";

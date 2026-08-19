@@ -122,6 +122,31 @@ curl -s -H "Authorization: Bearer $API_TOKEN" \
   "https://ims-api.sidharthprabhu.co.in/api/student/results?semester=1"
 ```
 
+#### C.2 Download Results PDF
+Retrieves the binary PDF report for the semester from the upstream server:
+- **Endpoint**: `GET /api/student/results/download?semester=X`
+
+##### Mac / Linux (Bash/Zsh)
+```bash
+curl -s -H "Authorization: Bearer $API_TOKEN" \
+  "https://ims-api.sidharthprabhu.co.in/api/student/results/download?semester=1" \
+  -o semester_1_results.pdf
+```
+
+##### Windows PowerShell
+```powershell
+curl.exe -s -H "Authorization: Bearer $env:API_TOKEN" `
+  "https://ims-api.sidharthprabhu.co.in/api/student/results/download?semester=1" `
+  -o semester_1_results.pdf
+```
+
+##### Windows Command Prompt (CMD)
+```cmd
+curl -s -H "Authorization: Bearer %API_TOKEN%" ^
+  "https://ims-api.sidharthprabhu.co.in/api/student/results/download?semester=1" ^
+  -o semester_1_results.pdf
+```
+
 #### D. Class Timetable
 - **Endpoint**: `GET /api/student/timetable`
 

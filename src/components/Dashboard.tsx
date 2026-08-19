@@ -92,6 +92,30 @@ export default function Dashboard({ session, onLoadSemester, onLoadCatMarks, onL
   const [paymentSuccessMsg, setPaymentSuccessMsg] = useState('');
   const [selectedPaymentMode, setSelectedPaymentMode] = useState<'upi' | 'card' | 'netbanking'>('upi');
   const [payAmount, setPayAmount] = useState<string>('');
+  const [pdfDownloading, setPdfDownloading] = useState(false);
+
+  const handleDownloadPDF = async (semNum: number) => {
+    setPdfDownloading(true);
+    try {
+      const res = await fetch(`/ims/admin/grade/student/mark/report/download/${semNum}`, {
+        credentials: 'same-origin'
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `semester_${semNum}_results.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(`Failed to download PDF: ${err.message}`);
+    } finally {
+      setPdfDownloading(false);
+    }
+  };
 
   const isLateral = lateralOverride !== null ? lateralOverride : !!session.studentInfo.isLateralEntry;
   const loadedSemesters = Object.values(session.semesters).sort((a, b) => a.semester - b.semester);
@@ -603,7 +627,22 @@ export default function Dashboard({ session, onLoadSemester, onLoadCatMarks, onL
                       <h3 className="results-title">Semester {displayedSemester.semester}</h3>
                       <p className="results-sub">{displayedSemester.subjects.length} courses</p>
                     </div>
-                    <span className="semester-gpa">GPA: {displayedSemester.gpa.toFixed(2)}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                      <span className="semester-gpa">GPA: {displayedSemester.gpa.toFixed(2)}</span>
+                      <button
+                        onClick={() => handleDownloadPDF(displayedSemester.semester)}
+                        disabled={pdfDownloading}
+                        className="btn-ghost-sm"
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', border: '1px solid rgba(255,255,255,0.1)' }}
+                      >
+                        {pdfDownloading ? (
+                          <Loader2 size={13} className="animate-spin" />
+                        ) : (
+                          <FileText size={13} />
+                        )}
+                        Download PDF
+                      </button>
+                    </div>
                   </div>
 
                   <div className="search-row">
