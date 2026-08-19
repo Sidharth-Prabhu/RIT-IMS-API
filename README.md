@@ -1276,7 +1276,9 @@ normal API request.
 
 ## Windows PowerShell
 
-PowerShell users should use `curl.exe` rather than `curl`, because `curl` may resolve to PowerShell's `Invoke-WebRequest` alias on some Windows versions.
+PowerShell users can use `Invoke-RestMethod` directly. This is the recommended PowerShell approach because the JSON response is automatically converted into a PowerShell object.
+
+If you specifically want to use curl, use `curl.exe`, not `curl`, because `curl` may resolve to PowerShell's `Invoke-WebRequest` alias.
 
 ### 1. Set the API URL
 
@@ -1286,38 +1288,44 @@ $BaseUrl = "https://ims-api.sidharthprabhu.co.in"
 
 ### 2. Log in
 
+Replace the register number and password:
+
 ```powershell
 $LoginBody = @{
     username = "YOUR_REGISTER_NUMBER"
     password = "YOUR_PASSWORD"
-} | ConvertTo-Json
+} | ConvertTo-Json -Compress
 
-$LoginResponse = curl.exe -s `
-    -X POST `
-    "$BaseUrl/api/auth/login" `
-    -H "Content-Type: application/json" `
-    -d $LoginBody
+$Login = Invoke-RestMethod `
+    -Uri "$BaseUrl/api/auth/login" `
+    -Method POST `
+    -ContentType "application/json" `
+    -Body $LoginBody
 
-$LoginResponse
+$Login
 ```
 
-Expected response:
+A successful login returns an object similar to:
 
-```json
-{
-  "success": true,
-  "message": "Authentication successful",
-  "session": "YOUR_API_SESSION_TOKEN"
-}
+```text
+success message
+------- -------
+True    Authentication successful
 ```
+
+The response also contains a `session` property.
 
 ### 3. Extract the API session token
 
+Because `Invoke-RestMethod` already parses the JSON response, **do not use `ConvertFrom-Json` here**.
+
+Correct:
+
 ```powershell
-$ApiToken = ($LoginResponse | ConvertFrom-Json).session
+$ApiToken = $Login.session
 ```
 
-Check the token:
+Check it:
 
 ```powershell
 $ApiToken
@@ -1328,19 +1336,14 @@ Do not share the token. It represents your authenticated API session.
 ### 4. Fetch Semester 1 marks
 
 ```powershell
-curl.exe -s `
-    -H "Authorization: Bearer $ApiToken" `
-    "$BaseUrl/api/student/results?semester=1"
-```
+$Results = Invoke-RestMethod `
+    -Uri "$BaseUrl/api/student/results?semester=1" `
+    -Method GET `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+    }
 
-To format the response as JSON inside PowerShell:
-
-```powershell
-curl.exe -s `
-    -H "Authorization: Bearer $ApiToken" `
-    "$BaseUrl/api/student/results?semester=1" |
-    ConvertFrom-Json |
-    ConvertTo-Json -Depth 10
+$Results | ConvertTo-Json -Depth 10
 ```
 
 ### 5. Fetch another semester
@@ -1348,17 +1351,14 @@ curl.exe -s `
 For Semester 2:
 
 ```powershell
-curl.exe -s `
-    -H "Authorization: Bearer $ApiToken" `
-    "$BaseUrl/api/student/results?semester=2"
-```
+$Results = Invoke-RestMethod `
+    -Uri "$BaseUrl/api/student/results?semester=2" `
+    -Method GET `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+    }
 
-For Semester 3:
-
-```powershell
-curl.exe -s `
-    -H "Authorization: Bearer $ApiToken" `
-    "$BaseUrl/api/student/results?semester=3"
+$Results | ConvertTo-Json -Depth 10
 ```
 
 Valid semester values are `1` through `8`.
@@ -1366,98 +1366,97 @@ Valid semester values are `1` through `8`.
 ### 6. Fetch profile
 
 ```powershell
-curl.exe -s `
-    -H "Authorization: Bearer $ApiToken" `
-    "$BaseUrl/api/student/profile"
+Invoke-RestMethod `
+    -Uri "$BaseUrl/api/student/profile" `
+    -Method GET `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+} | ConvertTo-Json -Depth 10
 ```
 
 ### 7. Fetch attendance
 
 ```powershell
-curl.exe -s `
-    -H "Authorization: Bearer $ApiToken" `
-    "$BaseUrl/api/student/attendance"
+Invoke-RestMethod `
+    -Uri "$BaseUrl/api/student/attendance" `
+    -Method GET `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+} | ConvertTo-Json -Depth 10
 ```
 
 ### 8. Fetch timetable
 
 ```powershell
-curl.exe -s `
-    -H "Authorization: Bearer $ApiToken" `
-    "$BaseUrl/api/student/timetable"
+Invoke-RestMethod `
+    -Uri "$BaseUrl/api/student/timetable" `
+    -Method GET `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+} | ConvertTo-Json -Depth 10
 ```
 
 ### 9. Fetch CAT marks
 
 ```powershell
-curl.exe -s `
-    -H "Authorization: Bearer $ApiToken" `
-    "$BaseUrl/api/student/cat-marks"
+Invoke-RestMethod `
+    -Uri "$BaseUrl/api/student/cat-marks" `
+    -Method GET `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+} | ConvertTo-Json -Depth 10
 ```
 
 ### 10. Fetch assignment marks
 
 ```powershell
-curl.exe -s `
-    -H "Authorization: Bearer $ApiToken" `
-    "$BaseUrl/api/student/assignment-marks"
+Invoke-RestMethod `
+    -Uri "$BaseUrl/api/student/assignment-marks" `
+    -Method GET `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+} | ConvertTo-Json -Depth 10
 ```
 
 ### 11. Fetch leave history
 
 ```powershell
-curl.exe -s `
-    -H "Authorization: Bearer $ApiToken" `
-    "$BaseUrl/api/student/leaves"
+Invoke-RestMethod `
+    -Uri "$BaseUrl/api/student/leaves" `
+    -Method GET `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+} | ConvertTo-Json -Depth 10
 ```
 
 ### 12. Fetch academic fees
 
 ```powershell
-curl.exe -s `
-    -H "Authorization: Bearer $ApiToken" `
-    "$BaseUrl/api/student/fees"
+Invoke-RestMethod `
+    -Uri "$BaseUrl/api/student/fees" `
+    -Method GET `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+} | ConvertTo-Json -Depth 10
 ```
 
 ### 13. Logout
 
 ```powershell
-curl.exe -s `
-    -X POST `
-    "$BaseUrl/api/auth/logout" `
-    -H "Authorization: Bearer $ApiToken"
+Invoke-RestMethod `
+    -Uri "$BaseUrl/api/auth/logout" `
+    -Method POST `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+} | ConvertTo-Json -Depth 10
 ```
 
-### Complete PowerShell example
+### 14. Health check
 
 ```powershell
-$BaseUrl = "https://ims-api.sidharthprabhu.co.in"
-
-$LoginBody = @{
-    username = "YOUR_REGISTER_NUMBER"
-    password = "YOUR_PASSWORD"
-} | ConvertTo-Json
-
-$LoginResponse = curl.exe -s `
-    -X POST `
-    "$BaseUrl/api/auth/login" `
-    -H "Content-Type: application/json" `
-    -d $LoginBody
-
-$ApiToken = ($LoginResponse | ConvertFrom-Json).session
-
-curl.exe -s `
-    -H "Authorization: Bearer $ApiToken" `
-    "$BaseUrl/api/student/results?semester=1" |
-    ConvertFrom-Json |
-    ConvertTo-Json -Depth 10
-```
-
-### PowerShell health check
-
-```powershell
-curl.exe -s `
-    "$BaseUrl/api/health"
+Invoke-RestMethod `
+    -Uri "$BaseUrl/api/health" `
+    -Method GET | ConvertTo-Json -Depth 10
 ```
 
 Expected:
@@ -1468,4 +1467,87 @@ Expected:
   "status": "ok"
 }
 ```
+
+### 15. Complete PowerShell workflow
+
+This is the recommended copy-paste workflow:
+
+```powershell
+$BaseUrl = "https://ims-api.sidharthprabhu.co.in"
+
+$LoginBody = @{
+    username = "YOUR_REGISTER_NUMBER"
+    password = "YOUR_PASSWORD"
+} | ConvertTo-Json -Compress
+
+$Login = Invoke-RestMethod `
+    -Uri "$BaseUrl/api/auth/login" `
+    -Method POST `
+    -ContentType "application/json" `
+    -Body $LoginBody
+
+if (-not $Login.success) {
+    Write-Error "Login failed: $($Login.message)"
+    exit 1
+}
+
+$ApiToken = $Login.session
+
+if (-not $ApiToken) {
+    Write-Error "Login succeeded but no API session token was returned."
+    exit 1
+}
+
+$Results = Invoke-RestMethod `
+    -Uri "$BaseUrl/api/student/results?semester=1" `
+    -Method GET `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+    }
+
+$Results | ConvertTo-Json -Depth 10
+```
+
+### Important PowerShell distinction
+
+With `Invoke-RestMethod`:
+
+```powershell
+$Login = Invoke-RestMethod ...
+$ApiToken = $Login.session
+```
+
+Do **not** do:
+
+```powershell
+$ApiToken = ($Login | ConvertFrom-Json).session
+```
+
+`Invoke-RestMethod` has already converted the JSON response into a PowerShell object.
+
+### PowerShell using curl.exe instead
+
+If you specifically want the command-line `curl` implementation:
+
+```powershell
+$BaseUrl = "https://ims-api.sidharthprabhu.co.in"
+
+$LoginBody = '{"username":"YOUR_REGISTER_NUMBER","password":"YOUR_PASSWORD"}'
+
+$LoginJson = curl.exe -s `
+    -X POST `
+    "$BaseUrl/api/auth/login" `
+    -H "Content-Type: application/json" `
+    --data-raw $LoginBody
+
+$Login = $LoginJson | ConvertFrom-Json
+
+$ApiToken = $Login.session
+
+curl.exe -s `
+    -H "Authorization: Bearer $ApiToken" `
+    "$BaseUrl/api/student/results?semester=1"
+```
+
+Here `ConvertFrom-Json` is correct because `curl.exe` returns the response as a JSON string.
 
