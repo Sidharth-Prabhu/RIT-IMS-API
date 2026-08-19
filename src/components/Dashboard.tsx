@@ -356,18 +356,10 @@ export default function Dashboard({ session, onLoadSemester, onLoadCatMarks, onL
                 </p>
               </div>
 
-              {loadedSemesters.length === 0 ? (
-                <div className="prompt-card">
-                  <TrendingUp size={40} className="prompt-icon" />
-                  <h3>No Data Loaded Yet</h3>
-                  <p>Go to <strong>Semester Results</strong> and load a semester to start seeing your CGPA and analytics here.</p>
-                  <button className="btn-primary-sm" onClick={() => setActiveTab('results')}>
-                    Go to Semester Results
-                  </button>
-                </div>
-              ) : (
+              {/* If we have dashboard stats, display them immediately */}
+              {session.studentInfo.dashboardStats ? (
                 <>
-                  {/* KPI Cards */}
+                  {/* Realtime KPI Cards */}
                   <div className="kpi-grid">
                     <div className="kpi-card glass-panel kpi-accent">
                       <div className="kpi-header">
@@ -375,50 +367,147 @@ export default function Dashboard({ session, onLoadSemester, onLoadCatMarks, onL
                         <GraduationCap size={18} className="kpi-icon accent-icon" />
                       </div>
                       <div className="kpi-value-row">
-                        <span className="kpi-value kpi-accent-value">{processed.cgpa.toFixed(2)}</span>
+                        <span className="kpi-value kpi-accent-value">
+                          {session.studentInfo.dashboardStats.cgpa}
+                        </span>
                         <span className="kpi-unit">/ 10.0</span>
                       </div>
                     </div>
+
                     <div className="kpi-card glass-panel kpi-success">
                       <div className="kpi-header">
-                        <span className="kpi-title">Earned Credits</span>
-                        <Award size={18} className="kpi-icon success-icon" />
+                        <span className="kpi-title">Current Attendance</span>
+                        <CalendarCheck size={18} className="kpi-icon success-icon" />
                       </div>
                       <div className="kpi-value-row">
-                        <span className="kpi-value kpi-success-value">{processed.totalCredits}</span>
-                        <span className="kpi-unit">Credits</span>
+                        <span className="kpi-value kpi-success-value">
+                          {session.studentInfo.dashboardStats.attendance}
+                        </span>
                       </div>
                     </div>
-                    <div className="kpi-card glass-panel">
+
+                    <div className="kpi-card glass-panel kpi-warning">
                       <div className="kpi-header">
-                        <span className="kpi-title">Completed Courses</span>
-                        <BookOpen size={18} className="kpi-icon muted-icon" />
+                        <span className="kpi-title">Pending Dues</span>
+                        <CreditCard size={18} className="kpi-icon warning-icon" />
                       </div>
                       <div className="kpi-value-row">
-                        <span className="kpi-value">{processed.totalSubjects}</span>
-                        <span className="kpi-unit">Subjects</span>
+                        <span className="kpi-value kpi-warning-value">
+                          {session.studentInfo.dashboardStats.pendingFees !== 'N/A' && !session.studentInfo.dashboardStats.pendingFees.startsWith('₹') && !session.studentInfo.dashboardStats.pendingFees.startsWith('Rs') ? '₹' : ''}
+                          {session.studentInfo.dashboardStats.pendingFees}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="kpi-card glass-panel kpi-danger">
+                      <div className="kpi-header">
+                        <span className="kpi-title">Active Arrears</span>
+                        <TriangleAlert size={18} className="kpi-icon danger-icon" />
+                      </div>
+                      <div className="kpi-value-row">
+                        <span className={`kpi-value ${session.studentInfo.dashboardStats.arrears !== '0' && session.studentInfo.dashboardStats.arrears !== 'N/A' ? 'kpi-danger-value' : 'muted-value'}`}>
+                          {session.studentInfo.dashboardStats.arrears}
+                        </span>
+                        <span className="kpi-unit">Arrears</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Charts */}
-                  <div className="analytics-section">
-                    <div className="analytics-card glass-panel">
-                      <h3 className="analytics-title">GPA Trend</h3>
-                      <div className="chart-container">
-                        <Line data={trendData} options={trendOptions} />
+                  {loadedSemesters.length === 0 ? (
+                    <div className="prompt-card" style={{ marginTop: '1rem' }}>
+                      <TrendingUp size={30} className="prompt-icon" />
+                      <h3>Detailed Analytics</h3>
+                      <p>To view your GPA trend and course-wise grade distributions, please load your semesters.</p>
+                      <button className="btn-primary-sm" onClick={() => setActiveTab('results')}>
+                        Go to Semester Results
+                      </button>
+                    </div>
+                  ) : (
+                    /* Charts */
+                    <div className="analytics-section">
+                      <div className="analytics-card glass-panel">
+                        <h3 className="analytics-title">GPA Trend</h3>
+                        <div className="chart-container">
+                          <Line data={trendData} options={trendOptions} />
+                        </div>
+                      </div>
+                      <div className="analytics-card glass-panel">
+                        <h3 className="analytics-title">Grade Distribution</h3>
+                        <div className="chart-container">
+                          {gradeLabels.length > 0
+                            ? <Bar data={distData} options={distOptions} />
+                            : <div className="chart-empty">No grade data yet.</div>}
+                        </div>
                       </div>
                     </div>
-                    <div className="analytics-card glass-panel">
-                      <h3 className="analytics-title">Grade Distribution</h3>
-                      <div className="chart-container">
-                        {gradeLabels.length > 0
-                          ? <Bar data={distData} options={distOptions} />
-                          : <div className="chart-empty">No grade data yet.</div>}
-                      </div>
-                    </div>
-                  </div>
+                  )}
                 </>
+              ) : (
+                /* Fallback if stats are not loaded */
+                loadedSemesters.length === 0 ? (
+                  <div className="prompt-card">
+                    <TrendingUp size={40} className="prompt-icon" />
+                    <h3>No Data Loaded Yet</h3>
+                    <p>Go to <strong>Semester Results</strong> and load a semester to start seeing your CGPA and analytics here.</p>
+                    <button className="btn-primary-sm" onClick={() => setActiveTab('results')}>
+                      Go to Semester Results
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {/* Fallback KPI Cards */}
+                    <div className="kpi-grid">
+                      <div className="kpi-card glass-panel kpi-accent">
+                        <div className="kpi-header">
+                          <span className="kpi-title">Cumulative CGPA</span>
+                          <GraduationCap size={18} className="kpi-icon accent-icon" />
+                        </div>
+                        <div className="kpi-value-row">
+                          <span className="kpi-value kpi-accent-value">{processed.cgpa.toFixed(2)}</span>
+                          <span className="kpi-unit">/ 10.0</span>
+                        </div>
+                      </div>
+                      <div className="kpi-card glass-panel kpi-success">
+                        <div className="kpi-header">
+                          <span className="kpi-title">Earned Credits</span>
+                          <Award size={18} className="kpi-icon success-icon" />
+                        </div>
+                        <div className="kpi-value-row">
+                          <span className="kpi-value kpi-success-value">{processed.totalCredits}</span>
+                          <span className="kpi-unit">Credits</span>
+                        </div>
+                      </div>
+                      <div className="kpi-card glass-panel">
+                        <div className="kpi-header">
+                          <span className="kpi-title">Completed Courses</span>
+                          <BookOpen size={18} className="kpi-icon muted-icon" />
+                        </div>
+                        <div className="kpi-value-row">
+                          <span className="kpi-value">{processed.totalSubjects}</span>
+                          <span className="kpi-unit">Subjects</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Charts */}
+                    <div className="analytics-section">
+                      <div className="analytics-card glass-panel">
+                        <h3 className="analytics-title">GPA Trend</h3>
+                        <div className="chart-container">
+                          <Line data={trendData} options={trendOptions} />
+                        </div>
+                      </div>
+                      <div className="analytics-card glass-panel">
+                        <h3 className="analytics-title">Grade Distribution</h3>
+                        <div className="chart-container">
+                          {gradeLabels.length > 0
+                            ? <Bar data={distData} options={distOptions} />
+                            : <div className="chart-empty">No grade data yet.</div>}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )
               )}
             </div>
           )}

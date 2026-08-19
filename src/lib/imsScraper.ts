@@ -166,12 +166,64 @@ export async function loginIms(username: string, password: string): Promise<{ st
     // proceed with defaults
   }
 
+  let dashboardStats = { cgpa: 'N/A', arrears: 'N/A', attendance: 'N/A', pendingFees: 'N/A' };
+  try {
+    const adminRes = await fetch('/ims/admin', { credentials: 'same-origin' });
+    if (adminRes.ok) {
+      const adminHtml = await adminRes.text();
+      const adminDoc = new DOMParser().parseFromString(adminHtml, 'text/html');
+      
+      const extractMetric = (labelRegex: RegExp, valueRegex: RegExp): string => {
+        const elements = Array.from(adminDoc.querySelectorAll('p, span, h3, h4, h1, td, th, b, strong, li, div'));
+        for (const el of elements) {
+          const text = (el.textContent || '').trim();
+          if (labelRegex.test(text) && text.length < 50) {
+            // Check immediate siblings
+            let sibling = el.nextElementSibling;
+            while (sibling) {
+              const sibText = (sibling.textContent || '').trim();
+              const match = sibText.match(valueRegex);
+              if (match) return match[1] || match[0];
+              sibling = sibling.nextElementSibling;
+            }
+            sibling = el.previousElementSibling;
+            while (sibling) {
+              const sibText = (sibling.textContent || '').trim();
+              const match = sibText.match(valueRegex);
+              if (match) return match[1] || match[0];
+              sibling = sibling.previousElementSibling;
+            }
+            
+            // Check direct parent wrapper
+            const parent = el.parentElement;
+            if (parent) {
+              const parentText = (parent.textContent || '').trim();
+              const cleanParentText = parentText.replace(text, '');
+              const match = cleanParentText.match(valueRegex);
+              if (match) return match[1] || match[0];
+            }
+          }
+        }
+        return 'N/A';
+      };
+
+      dashboardStats.cgpa = extractMetric(/\bCGPA\b/i, /(\d+\.\d+)/);
+      dashboardStats.arrears = extractMetric(/\barrears?\b/i, /\b(\d+)\b/);
+      dashboardStats.attendance = extractMetric(/\battendance\b/i, /(\d+(?:\.\d+)?\s*%)/) || extractMetric(/\battendance\b/i, /(\d+(?:\.\d+)?)/);
+      dashboardStats.pendingFees = extractMetric(/(?:pending|due|balance|academic)\s*fees?/i, /(?:Rs\.?|₹)\s*([\d,]+)/) || 
+                                   extractMetric(/(?:pending|due|balance|academic)\s*fees?/i, /\b([\d,]+)\b/);
+    }
+  } catch {
+    // proceed
+  }
+
   const studentInfo: StudentInfo = {
     name: studentName,
     regNo: username,
     department,
     college: 'Rajalakshmi Institute of Technology',
     isLateralEntry: false,
+    dashboardStats,
   };
 
   return { studentInfo, csrfToken };

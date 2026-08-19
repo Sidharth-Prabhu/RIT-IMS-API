@@ -222,41 +222,45 @@ export default async (request: Request, context: Context) => {
           const adminHtml = await adminRes.text();
           const adminDoc = parse(adminHtml);
           
-          // Parse small-boxes and cards from the admin dashboard
-          const boxes = adminDoc.querySelectorAll(".small-box, .info-box, .inner, .card, .box, div, td");
-          for (const box of boxes) {
-            const text = box.textContent || "";
-            const cleanText = text.replace(/\s+/g, " ").trim();
-            
-            // Look for CGPA
-            if (/cgpa/i.test(cleanText)) {
-              const match = cleanText.match(/(\d+\.\d+)/);
-              if (match && dashboardStats.cgpa === "N/A") {
-                dashboardStats.cgpa = match[1];
+          const extractMetric = (labelRegex: RegExp, valueRegex: RegExp): string => {
+            const elements = adminDoc.querySelectorAll("p, span, h3, h4, h1, td, th, b, strong, li, div");
+            for (const el of elements) {
+              const text = (el.textContent || "").trim();
+              if (labelRegex.test(text) && text.length < 50) {
+                // Check immediate siblings
+                let sibling = el.nextElementSibling;
+                while (sibling) {
+                  const sibText = (sibling.textContent || "").trim();
+                  const match = sibText.match(valueRegex);
+                  if (match) return match[1] || match[0];
+                  sibling = sibling.nextElementSibling;
+                }
+                sibling = el.previousElementSibling;
+                while (sibling) {
+                  const sibText = (sibling.textContent || "").trim();
+                  const match = sibText.match(valueRegex);
+                  if (match) return match[1] || match[0];
+                  sibling = sibling.previousElementSibling;
+                }
+                
+                // Check direct parent wrapper
+                const parent = el.parentElement;
+                if (parent) {
+                  const parentText = (parent.textContent || "").trim();
+                  const cleanParentText = parentText.replace(text, "");
+                  const match = cleanParentText.match(valueRegex);
+                  if (match) return match[1] || match[0];
+                }
               }
             }
-            // Look for Arrears
-            if (/arrear/i.test(cleanText)) {
-              const match = cleanText.match(/\b(\d+)\b/);
-              if (match && dashboardStats.arrears === "N/A") {
-                dashboardStats.arrears = match[1];
-              }
-            }
-            // Look for Attendance
-            if (/attendance/i.test(cleanText)) {
-              const match = cleanText.match(/(\d+(?:\.\d+)?\s*%)/) || cleanText.match(/(\d+(?:\.\d+)?)/);
-              if (match && dashboardStats.attendance === "N/A") {
-                dashboardStats.attendance = match[1];
-              }
-            }
-            // Look for Pending Fees
-            if (/(?:pending|due|balance|academic)\s*fee/i.test(cleanText) || /fees?/i.test(cleanText)) {
-              const match = cleanText.match(/(?:Rs\.?|₹)\s*([\d,]+)/) || cleanText.match(/\b([\d,]{4,})\b/);
-              if (match && dashboardStats.pendingFees === "N/A") {
-                dashboardStats.pendingFees = match[1];
-              }
-            }
-          }
+            return "N/A";
+          };
+
+          dashboardStats.cgpa = extractMetric(/\bCGPA\b/i, /(\d+\.\d+)/);
+          dashboardStats.arrears = extractMetric(/\barrears?\b/i, /\b(\d+)\b/);
+          dashboardStats.attendance = extractMetric(/\battendance\b/i, /(\d+(?:\.\d+)?\s*%)/) || extractMetric(/\battendance\b/i, /(\d+(?:\.\d+)?)/);
+          dashboardStats.pendingFees = extractMetric(/(?:pending|due|balance|academic)\s*fees?/i, /(?:Rs\.?|₹)\s*([\d,]+)/) || 
+                                       extractMetric(/(?:pending|due|balance|academic)\s*fees?/i, /\b([\d,]+)\b/);
         }
       } catch (adminErr) {
         console.warn("Failed to fetch dashboard metrics:", adminErr);

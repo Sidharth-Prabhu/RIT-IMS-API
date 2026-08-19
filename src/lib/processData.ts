@@ -18,6 +18,12 @@ export interface StudentInfo {
   department: string;
   college: string;
   isLateralEntry: boolean;
+  dashboardStats?: {
+    cgpa: string;
+    arrears: string;
+    attendance: string;
+    pendingFees: string;
+  };
 }
 
 export interface CatMark {
