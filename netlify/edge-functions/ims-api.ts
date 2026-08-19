@@ -1,5 +1,5 @@
 import type { Context, Config } from "@netlify/edge-functions";
-import { parse } from "npm:node-html-parser";
+import { parse } from "https://esm.sh/node-html-parser@9.0.1";
 
 export const config: Config = {
   path: "/api/*",
