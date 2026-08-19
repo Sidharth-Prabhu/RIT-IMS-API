@@ -1,4 +1,8 @@
-import type { Context } from "@netlify/edge-functions";
+import type { Context, Config } from "@netlify/edge-functions";
+
+export const config: Config = {
+  path: "/ims/*",
+};
 
 export default async (request: Request, context: Context) => {
   const url = new URL(request.url);
@@ -25,8 +29,12 @@ export default async (request: Request, context: Context) => {
 
   // Handle request body if present (for POST requests)
   let body: ArrayBuffer | undefined = undefined;
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    body = await request.arrayBuffer();
+  if (request.body) {
+    try {
+      body = await request.arrayBuffer();
+    } catch (bodyErr) {
+      console.warn("Failed to parse request body:", bodyErr);
+    }
   }
 
   try {
@@ -43,8 +51,8 @@ export default async (request: Request, context: Context) => {
     const location = newHeaders.get("location");
     if (location) {
       let rewrittenLocation = location;
-      if (rewrittenLocation.includes("ims.ritchennai.edu.in")) {
-        rewrittenLocation = rewrittenLocation.replace(/https:\/\/ims\.ritchennai\.edu\.in/gi, `${url.origin}/ims`);
+      if (/https?:\/\/ims\.ritchennai\.edu\.in/i.test(rewrittenLocation)) {
+        rewrittenLocation = rewrittenLocation.replace(/https?:\/\/ims\.ritchennai\.edu\.in/gi, `${url.origin}/ims`);
       } else if (rewrittenLocation.startsWith("/")) {
         rewrittenLocation = "/ims" + rewrittenLocation;
       }
@@ -52,7 +60,17 @@ export default async (request: Request, context: Context) => {
     }
 
     // 2. Tweak cookies to allow them on the Netlify domain (removing domain restriction)
-    const setCookies = response.headers.getSetCookie?.() || [];
+    let setCookies: string[] = [];
+    if (typeof response.headers.getSetCookie === "function") {
+      setCookies = response.headers.getSetCookie();
+    } else {
+      // Fallback for older Deno runtimes
+      const rawCookie = response.headers.get("set-cookie");
+      if (rawCookie) {
+        setCookies = rawCookie.split(/,\s*(?=[A-Za-z0-9_-]+=)/);
+      }
+    }
+
     if (setCookies.length > 0) {
       newHeaders.delete("set-cookie");
       for (const cookie of setCookies) {
