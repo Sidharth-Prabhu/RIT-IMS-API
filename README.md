@@ -1272,3 +1272,200 @@ Must return JSON containing semester results.
 
 The client must never receive the upstream IMS login HTML during a
 normal API request.
+
+
+## Windows PowerShell
+
+PowerShell users should use `curl.exe` rather than `curl`, because `curl` may resolve to PowerShell's `Invoke-WebRequest` alias on some Windows versions.
+
+### 1. Set the API URL
+
+```powershell
+$BaseUrl = "https://ims-api.sidharthprabhu.co.in"
+```
+
+### 2. Log in
+
+```powershell
+$LoginBody = @{
+    username = "YOUR_REGISTER_NUMBER"
+    password = "YOUR_PASSWORD"
+} | ConvertTo-Json
+
+$LoginResponse = curl.exe -s `
+    -X POST `
+    "$BaseUrl/api/auth/login" `
+    -H "Content-Type: application/json" `
+    -d $LoginBody
+
+$LoginResponse
+```
+
+Expected response:
+
+```json
+{
+  "success": true,
+  "message": "Authentication successful",
+  "session": "YOUR_API_SESSION_TOKEN"
+}
+```
+
+### 3. Extract the API session token
+
+```powershell
+$ApiToken = ($LoginResponse | ConvertFrom-Json).session
+```
+
+Check the token:
+
+```powershell
+$ApiToken
+```
+
+Do not share the token. It represents your authenticated API session.
+
+### 4. Fetch Semester 1 marks
+
+```powershell
+curl.exe -s `
+    -H "Authorization: Bearer $ApiToken" `
+    "$BaseUrl/api/student/results?semester=1"
+```
+
+To format the response as JSON inside PowerShell:
+
+```powershell
+curl.exe -s `
+    -H "Authorization: Bearer $ApiToken" `
+    "$BaseUrl/api/student/results?semester=1" |
+    ConvertFrom-Json |
+    ConvertTo-Json -Depth 10
+```
+
+### 5. Fetch another semester
+
+For Semester 2:
+
+```powershell
+curl.exe -s `
+    -H "Authorization: Bearer $ApiToken" `
+    "$BaseUrl/api/student/results?semester=2"
+```
+
+For Semester 3:
+
+```powershell
+curl.exe -s `
+    -H "Authorization: Bearer $ApiToken" `
+    "$BaseUrl/api/student/results?semester=3"
+```
+
+Valid semester values are `1` through `8`.
+
+### 6. Fetch profile
+
+```powershell
+curl.exe -s `
+    -H "Authorization: Bearer $ApiToken" `
+    "$BaseUrl/api/student/profile"
+```
+
+### 7. Fetch attendance
+
+```powershell
+curl.exe -s `
+    -H "Authorization: Bearer $ApiToken" `
+    "$BaseUrl/api/student/attendance"
+```
+
+### 8. Fetch timetable
+
+```powershell
+curl.exe -s `
+    -H "Authorization: Bearer $ApiToken" `
+    "$BaseUrl/api/student/timetable"
+```
+
+### 9. Fetch CAT marks
+
+```powershell
+curl.exe -s `
+    -H "Authorization: Bearer $ApiToken" `
+    "$BaseUrl/api/student/cat-marks"
+```
+
+### 10. Fetch assignment marks
+
+```powershell
+curl.exe -s `
+    -H "Authorization: Bearer $ApiToken" `
+    "$BaseUrl/api/student/assignment-marks"
+```
+
+### 11. Fetch leave history
+
+```powershell
+curl.exe -s `
+    -H "Authorization: Bearer $ApiToken" `
+    "$BaseUrl/api/student/leaves"
+```
+
+### 12. Fetch academic fees
+
+```powershell
+curl.exe -s `
+    -H "Authorization: Bearer $ApiToken" `
+    "$BaseUrl/api/student/fees"
+```
+
+### 13. Logout
+
+```powershell
+curl.exe -s `
+    -X POST `
+    "$BaseUrl/api/auth/logout" `
+    -H "Authorization: Bearer $ApiToken"
+```
+
+### Complete PowerShell example
+
+```powershell
+$BaseUrl = "https://ims-api.sidharthprabhu.co.in"
+
+$LoginBody = @{
+    username = "YOUR_REGISTER_NUMBER"
+    password = "YOUR_PASSWORD"
+} | ConvertTo-Json
+
+$LoginResponse = curl.exe -s `
+    -X POST `
+    "$BaseUrl/api/auth/login" `
+    -H "Content-Type: application/json" `
+    -d $LoginBody
+
+$ApiToken = ($LoginResponse | ConvertFrom-Json).session
+
+curl.exe -s `
+    -H "Authorization: Bearer $ApiToken" `
+    "$BaseUrl/api/student/results?semester=1" |
+    ConvertFrom-Json |
+    ConvertTo-Json -Depth 10
+```
+
+### PowerShell health check
+
+```powershell
+curl.exe -s `
+    "$BaseUrl/api/health"
+```
+
+Expected:
+
+```json
+{
+  "success": true,
+  "status": "ok"
+}
+```
+
