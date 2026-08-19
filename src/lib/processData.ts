@@ -18,6 +18,7 @@ export interface StudentInfo {
   department: string;
   college: string;
   isLateralEntry: boolean;
+  batch?: string;
   dashboardStats?: {
     cgpa: string;
     arrears: string;

@@ -85,6 +85,37 @@ function serializeCookies(cookies: Record<string, string>): string {
     .join("; ");
 }
 
+async function fetchStudentProfileHtml(cookies: Record<string, string>): Promise<{ html: string; error?: Response }> {
+  const headers = getUpstreamHeaders(cookies);
+  let reportRes;
+  try {
+    reportRes = await fetch("https://ims.ritchennai.edu.in/admin/grade/student/mark/report", { headers });
+  } catch (_err) {
+    return { html: "", error: errorResponse("UPSTREAM_UNAVAILABLE", "Failed to communicate with RIT IMS.", 502) };
+  }
+  const reportHtml = await reportRes.text();
+  const doc = parse(reportHtml);
+  
+  const profileLinkEl = doc.querySelector('a[href*="Profile-view"]');
+  let profilePath = "";
+  if (profileLinkEl) {
+    const href = profileLinkEl.getAttribute("href") || "";
+    profilePath = href.replace("https://ims.ritchennai.edu.in", "");
+  }
+  
+  if (!profilePath) {
+    profilePath = "/admin/students/Profile-view";
+  }
+  
+  try {
+    const profileRes = await fetch(`https://ims.ritchennai.edu.in${profilePath}`, { headers });
+    const html = await profileRes.text();
+    return { html };
+  } catch (_err) {
+    return { html: "", error: errorResponse("UPSTREAM_UNAVAILABLE", "Failed to retrieve student profile page.", 502) };
+  }
+}
+
 // ─── Header Helper ────────────────────────────────────────────────────────────
 
 const USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -266,6 +297,61 @@ export default async (request: Request, context: Context) => {
         console.warn("Failed to fetch dashboard metrics:", adminErr);
       }
 
+      // Step C.3: Fetch the profile page to parse studentInfo
+      let studentInfo = { name: "Student", register_number: username, department: "", batch: "" };
+      try {
+        const { html: profHtml, error: profErr } = await fetchStudentProfileHtml(finalCookies);
+        if (!profErr) {
+          const profDoc = parse(profHtml);
+          const rawFields: Record<string, string> = {};
+          const addField = (label: string, val: string) => {
+            const cleanLabel = label.replace(/:/g, "").replace(/\*/g, "").trim().toLowerCase();
+            const cleanVal = val.trim();
+            if (cleanLabel && cleanVal && cleanLabel !== "_token") {
+              rawFields[cleanLabel] = cleanVal;
+            }
+          };
+
+          profDoc.querySelectorAll("tr, dl, .profile-info-row, .row").forEach(row => {
+            const ths = row.querySelectorAll("th");
+            const tds = row.querySelectorAll("td");
+            if (ths.length > 0 && tds.length > 0 && ths.length === tds.length) {
+              for (let i = 0; i < ths.length; i++) {
+                addField(ths[i].textContent || "", tds[i].textContent || "");
+              }
+            } else if (tds.length >= 2) {
+              for (let i = 0; i < tds.length - 1; i += 2) {
+                addField(tds[i].textContent || "", tds[i + 1].textContent || "");
+              }
+            }
+          });
+
+          const findField = (...keys: string[]): string => {
+            for (const k of keys) {
+              const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, "");
+              for (const [rk, rv] of Object.entries(rawFields)) {
+                const cleanRk = rk.toLowerCase().replace(/[^a-z0-9]/g, "");
+                if (cleanRk.includes(cleanK)) {
+                  return rv;
+                }
+              }
+            }
+            return "";
+          };
+
+          const pName = findField("name", "fullname");
+          if (pName) studentInfo.name = pName;
+          
+          const pDept = findField("department", "branch", "course");
+          if (pDept) studentInfo.department = pDept;
+
+          const pBatch = findField("batch", "academicyear");
+          if (pBatch) studentInfo.batch = pBatch;
+        }
+      } catch (profErr) {
+        console.warn("Failed to fetch student profile during login:", profErr);
+      }
+
       // Step D: Create Encrypted Opaque Session Token
       const sessionData = {
         cookies: finalCookies,
@@ -279,6 +365,7 @@ export default async (request: Request, context: Context) => {
         success: true,
         message: "Authentication successful",
         session: apiToken,
+        studentInfo: studentInfo,
         dashboard: dashboardStats
       }, 200, corsHeaders);
 
@@ -394,7 +481,7 @@ export default async (request: Request, context: Context) => {
 
   // 5. Student Profile Endpoint
   if (path === "/api/student/profile" && request.method === "GET") {
-    const { html, error } = await fetchUpstream("/admin/students/Profile-view");
+    const { html, error } = await fetchStudentProfileHtml(session.cookies);
     if (error) return error;
 
     const doc = parse(html);
@@ -425,8 +512,13 @@ export default async (request: Request, context: Context) => {
 
     const findField = (...keys: string[]): string => {
       for (const k of keys) {
-        const matchKey = Object.keys(rawFields).find(rk => rk.includes(k.toLowerCase()));
-        if (matchKey) return rawFields[matchKey];
+        const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, "");
+        for (const [rk, rv] of Object.entries(rawFields)) {
+          const cleanRk = rk.toLowerCase().replace(/[^a-z0-9]/g, "");
+          if (cleanRk.includes(cleanK)) {
+            return rv;
+          }
+        }
       }
       return "";
     };
@@ -434,7 +526,7 @@ export default async (request: Request, context: Context) => {
     const name = findField("name", "fullname") || "Student";
     const register_number = findField("register", "regno", "rollno") || session.username;
     const department = findField("department", "branch", "course") || "";
-    const batch = findField("batch", "academic year") || "";
+    const batch = findField("batch", "academicyear") || "";
 
     return jsonResponse({
       success: true,

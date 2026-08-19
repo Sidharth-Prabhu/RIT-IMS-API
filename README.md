@@ -54,6 +54,12 @@ curl -s -X POST "https://ims-api.sidharthprabhu.co.in/api/auth/login" \
   "success": true,
   "message": "Authentication successful",
   "session": "API_SESSION_TOKEN",
+  "studentInfo": {
+    "name": "Student Name",
+    "register_number": "211724...",
+    "department": "Artificial Intelligence and Data Science",
+    "batch": "2024-2028"
+  },
   "dashboard": {
     "cgpa": "6.66",
     "arrears": "1",

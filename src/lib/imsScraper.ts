@@ -87,7 +87,8 @@ export async function loginIms(username: string, password: string): Promise<{ st
 
   // Step 3: Fetch student name/dept from report page
   let studentName = 'RIT Student';
-  let department = 'Computer Science and Engineering';
+  let department = '';
+  let batch = '';
 
   try {
     const reportRes = await fetch('/ims/admin/grade/student/mark/report', { credentials: 'same-origin' });
@@ -101,7 +102,7 @@ export async function loginIms(username: string, password: string): Promise<{ st
       const nameEl = doc.querySelector('.nav_prof_label span');
       if (nameEl?.textContent) studentName = nameEl.textContent.trim();
 
-      const profileLinkEl = doc.querySelector('a[href*="/Profile-view"]');
+      const profileLinkEl = doc.querySelector('a[href*="Profile-view"]');
       const profileUrl = profileLinkEl?.getAttribute('href');
       if (profileUrl) {
         let target = profileUrl;
@@ -117,33 +118,51 @@ export async function loginIms(username: string, password: string): Promise<{ st
           if (profileRes.ok) {
             const profileHtml = await profileRes.text();
             const profileDoc = new DOMParser().parseFromString(profileHtml, 'text/html');
-            const cells = Array.from(profileDoc.querySelectorAll('td, th, span, div, p'));
-            for (let i = 0; i < cells.length; i++) {
-              const label = cells[i].textContent?.trim().toLowerCase() || '';
-              if (label === 'name' || label === 'student name' || label === 'name of the student') {
-                const val = cells[i + 1]?.textContent?.trim();
-                if (val) studentName = val;
+            const rawFields: Record<string, string> = {};
+            const addField = (label: string, val: string) => {
+              const cleanLabel = label.replace(/:/g, '').replace(/\*/g, '').trim().toLowerCase();
+              const cleanVal = val.trim();
+              if (cleanLabel && cleanVal && cleanLabel !== '_token') {
+                rawFields[cleanLabel] = cleanVal;
               }
-              if (label === 'branch' || label === 'department' || label === 'course') {
-                const val = cells[i + 1]?.textContent?.trim();
-                if (val) department = val;
-              }
-            }
+            };
+
             const rows = Array.from(profileDoc.querySelectorAll('tr, .row, .profile-info-row'));
             rows.forEach(row => {
-              const text = row.textContent || '';
-              if (text.includes(':')) {
-                const parts = text.split(':');
-                const key = parts[0].trim().toLowerCase();
-                const val = parts[1]?.trim();
-                if ((key.includes('name') || key === 'student name') && !key.includes('father') && !key.includes('mother') && val) {
-                  studentName = val;
+              const ths = Array.from(row.querySelectorAll('th'));
+              const tds = Array.from(row.querySelectorAll('td'));
+              if (ths.length > 0 && tds.length > 0 && ths.length === tds.length) {
+                for (let i = 0; i < ths.length; i++) {
+                  addField(ths[i].textContent || '', tds[i].textContent || '');
                 }
-                if ((key.includes('branch') || key.includes('department') || key.includes('course') || key.includes('degree')) && val) {
-                  department = val;
+              } else if (tds.length >= 2) {
+                for (let i = 0; i < tds.length - 1; i += 2) {
+                  addField(tds[i].textContent || '', tds[i + 1].textContent || '');
                 }
               }
             });
+
+            const findField = (...keys: string[]): string => {
+              for (const k of keys) {
+                const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+                for (const [rk, rv] of Object.entries(rawFields)) {
+                  const cleanRk = rk.toLowerCase().replace(/[^a-z0-9]/g, '');
+                  if (cleanRk.includes(cleanK)) {
+                    return rv;
+                  }
+                }
+              }
+              return '';
+            };
+
+            const parsedName = findField('name', 'fullname');
+            if (parsedName) studentName = parsedName;
+            
+            const parsedDept = findField('department', 'branch', 'course');
+            if (parsedDept) department = parsedDept;
+
+            const parsedBatch = findField('batch', 'academicyear');
+            if (parsedBatch) batch = parsedBatch;
           }
         } catch {
           // profile fetch failed, use fallback
@@ -151,7 +170,7 @@ export async function loginIms(username: string, password: string): Promise<{ st
       }
 
       // Fallback: scan report page text nodes for department
-      if (department === 'Computer Science and Engineering') {
+      if (!department) {
         const nodes = Array.from(doc.querySelectorAll('td, th, span, div, p, label, strong, h1, h2, h3, li'));
         nodes.forEach(node => {
           const text = node.textContent || '';
@@ -223,6 +242,7 @@ export async function loginIms(username: string, password: string): Promise<{ st
     department,
     college: 'Rajalakshmi Institute of Technology',
     isLateralEntry: false,
+    batch: batch || undefined,
     dashboardStats,
   };
 

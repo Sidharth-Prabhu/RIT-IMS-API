@@ -329,6 +329,12 @@ export default function Dashboard({ session, onLoadSemester, onLoadCatMarks, onL
               <span>{session.studentInfo.regNo}</span>
               <span className="dot-separator" />
               <span>{session.studentInfo.department}</span>
+              {session.studentInfo.batch && (
+                <>
+                  <span className="dot-separator" />
+                  <span>{session.studentInfo.batch}</span>
+                </>
+              )}
               <span className="dot-separator" />
               <span className="badge-lateral">{isLateral ? 'Lateral Entry' : 'Regular'}</span>
             </div>
