@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import LoginForm from './components/LoginForm';
 import Dashboard from './components/Dashboard';
-import { loginIms, logoutIms, fetchSemesterGrades, fetchCatMarks, fetchAttendance, fetchTimetable, fetchStudentProfile, fetchAssignmentMarks, fetchAcademicFee } from './lib/imsScraper';
-import type { StudentInfo, Semester, CatMark, AttendanceEntry, Timetable, StudentProfile, AssignmentMark, AcademicFeeData } from './lib/processData';
+import { loginIms, logoutIms, fetchSemesterGrades, fetchCatMarks, fetchAttendance, fetchTimetable, fetchStudentProfile, fetchAssignmentMarks, fetchAcademicFee, fetchExamFeeData } from './lib/imsScraper';
+import type { StudentInfo, Semester, CatMark, AttendanceEntry, Timetable, StudentProfile, AssignmentMark, AcademicFeeData, ExamFeeData } from './lib/processData';
 
 export interface AppSession {
   studentInfo: StudentInfo;
@@ -14,6 +14,7 @@ export interface AppSession {
   profile: StudentProfile | null;
   assignmentMarks: AssignmentMark[] | null;
   feeData: AcademicFeeData | null;
+  examFeeData: ExamFeeData | null;
 }
 
 export default function App() {
@@ -36,6 +37,7 @@ export default function App() {
         profile: null,
         assignmentMarks: null,
         feeData: null,
+        examFeeData: null,
       });
     } catch (err: any) {
       setError(err.message || 'An unexpected error occurred.');
@@ -106,6 +108,16 @@ export default function App() {
     return fees;
   };
 
+  const handleLoadExamFeeData = async (): Promise<ExamFeeData | null> => {
+    if (!session) return null;
+    if (session.examFeeData !== null) return session.examFeeData;
+    const examFees = await fetchExamFeeData(session.csrfToken);
+    if (examFees) {
+      setSession(prev => prev ? { ...prev, examFeeData: examFees } : prev);
+    }
+    return examFees;
+  };
+
   const handleLogout = async () => {
     setLoading(true);
     await logoutIms();
@@ -124,6 +136,7 @@ export default function App() {
         onLoadProfile={handleLoadProfile}
         onLoadAssignmentMarks={handleLoadAssignmentMarks}
         onLoadFeeData={handleLoadFeeData}
+        onLoadExamFeeData={handleLoadExamFeeData}
         onLogout={handleLogout}
         loading={loading}
       />

@@ -14,12 +14,12 @@ import {
 import { Line, Bar } from 'react-chartjs-2';
 import GradeTable from './GradeTable';
 import { processAcademicData } from '../lib/processData';
-import type { Semester, CatMark, AttendanceEntry, Timetable, StudentProfile, AssignmentMark, AcademicFeeData } from '../lib/processData';
+import type { Semester, CatMark, AttendanceEntry, Timetable, StudentProfile, AssignmentMark, AcademicFeeData, ExamFeeData } from '../lib/processData';
 import type { AppSession } from '../App';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler);
 
-type Tab = 'overview' | 'results' | 'catmarks' | 'assignments' | 'attendance' | 'timetable' | 'profile' | 'fees';
+type Tab = 'overview' | 'results' | 'catmarks' | 'assignments' | 'attendance' | 'timetable' | 'profile' | 'fees' | 'examfees';
 
 interface DashboardProps {
   session: AppSession;
@@ -30,6 +30,7 @@ interface DashboardProps {
   onLoadProfile: () => Promise<StudentProfile | null>;
   onLoadAssignmentMarks: () => Promise<AssignmentMark[]>;
   onLoadFeeData: () => Promise<AcademicFeeData | null>;
+  onLoadExamFeeData: () => Promise<ExamFeeData | null>;
   onLogout: () => void;
   loading: boolean;
 }
@@ -67,7 +68,7 @@ const gradeColors: Record<string, string> = {
   RA: 'rgba(239,68,68,0.85)', F: 'rgba(239,68,68,0.85)',
 };
 
-export default function Dashboard({ session, onLoadSemester, onLoadCatMarks, onLoadAttendance, onLoadTimetable, onLoadProfile, onLoadAssignmentMarks, onLoadFeeData, onLogout, loading }: DashboardProps) {
+export default function Dashboard({ session, onLoadSemester, onLoadCatMarks, onLoadAttendance, onLoadTimetable, onLoadProfile, onLoadAssignmentMarks, onLoadFeeData, onLoadExamFeeData, onLogout, loading }: DashboardProps) {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [selectedSem, setSelectedSem] = useState<number>(1);
   const [semLoading, setSemLoading] = useState(false);
@@ -78,6 +79,7 @@ export default function Dashboard({ session, onLoadSemester, onLoadCatMarks, onL
   const [profLoading, setProfLoading] = useState(false);
   const [assignLoading, setAssignLoading] = useState(false);
   const [feeLoading, setFeeLoading] = useState(false);
+  const [examLoading, setExamLoading] = useState(false);
   const [semSearch, setSemSearch] = useState('');
   const [catSearch, setCatSearch] = useState('');
   const [attSearch, setAttSearch] = useState('');
@@ -93,6 +95,36 @@ export default function Dashboard({ session, onLoadSemester, onLoadCatMarks, onL
   const [selectedPaymentMode, setSelectedPaymentMode] = useState<'upi' | 'card' | 'netbanking'>('upi');
   const [payAmount, setPayAmount] = useState<string>('');
   const [pdfDownloading, setPdfDownloading] = useState(false);
+  const [receiptDownloading, setReceiptDownloading] = useState<string | null>(null);
+
+  const handleLoadExamFees = async () => {
+    setExamLoading(true);
+    await onLoadExamFeeData();
+    setExamLoading(false);
+  };
+
+  const handleDownloadReceipt = async (historyId: string) => {
+    setReceiptDownloading(historyId);
+    try {
+      const res = await fetch(`/ims/admin/exam-fee-details/download-receipt/${historyId}`, {
+        credentials: 'same-origin'
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `exam_receipt_${historyId.slice(0, 8)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(`Failed to download receipt: ${err.message}`);
+    } finally {
+      setReceiptDownloading(null);
+    }
+  };
 
   const handleDownloadPDF = async (semNum: number) => {
     setPdfDownloading(true);
@@ -307,6 +339,7 @@ export default function Dashboard({ session, onLoadSemester, onLoadCatMarks, onL
     { tab: 'catmarks', label: 'CAT Marks', icon: <ClipboardList size={18} /> },
     { tab: 'assignments', label: 'Assignment Marks', icon: <FileSpreadsheet size={18} /> },
     { tab: 'fees', label: 'Academic Fee', icon: <CreditCard size={18} /> },
+    { tab: 'examfees', label: 'Exam Fee', icon: <Receipt size={18} /> },
     { tab: 'attendance', label: 'Attendance', icon: <CalendarCheck size={18} /> },
     { tab: 'timetable', label: 'Time Table', icon: <CalendarDays size={18} /> },
     { tab: 'profile', label: 'My Profile', icon: <User size={18} /> },
@@ -1744,21 +1777,176 @@ export default function Dashboard({ session, onLoadSemester, onLoadCatMarks, onL
               )}
             </div>
           )}
+          {/* ══════════════ EXAM FEE TAB ══════════════ */}
+          {activeTab === 'examfees' && (
+            <div className="tab-page">
+              <div className="page-heading">
+                <div className="page-heading-row">
+                  <div>
+                    <h2>Exam Fee & Receipt Center</h2>
+                    <p className="page-subheading">View details of pending exam fees, due dates, and download payment receipts from official RIT records.</p>
+                  </div>
+                  {session.examFeeData && (
+                    <button className="btn-ghost-sm" onClick={handleLoadExamFees}>
+                      <RefreshCw size={13} /> Refresh Records
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {session.examFeeData === null && !examLoading && (
+                <div className="prompt-card">
+                  <Receipt size={40} className="prompt-icon" />
+                  <h3>Exam Fees Not Loaded</h3>
+                  <p>Click the button below to retrieve your live semester exam fees and receipt history from the RIT portal.</p>
+                  <button className="btn-load" onClick={handleLoadExamFees}>
+                    Fetch Exam Fees
+                  </button>
+                </div>
+              )}
+
+              {examLoading && (
+                <div className="loading-card glass-panel">
+                  <Loader2 size={32} className="animate-spin accent-icon" />
+                  <p>Fetching exam fees and payment history from RIT IMS…</p>
+                </div>
+              )}
+
+              {session.examFeeData !== null && !examLoading && (
+                <div className="fee-container">
+                  {/* Current Exam Fees */}
+                  <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '16px' }}>Current Outstanding Fees</h3>
+                  {session.examFeeData.fees.length > 0 ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '32px' }}>
+                      {session.examFeeData.fees.map((fee, idx) => (
+                        <div key={idx} className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontWeight: 700, fontSize: '15px' }}>Semester {fee.semester} Exam</span>
+                            <span className={`leave-status-badge ${fee.active === '1' ? 'leave-approved' : 'leave-rejected'}`}>
+                              {fee.active === '1' ? 'Active' : 'Inactive'}
+                            </span>
+                          </div>
+                          
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Exam Period</span>
+                            <span style={{ fontSize: '14px', fontWeight: 500 }}>{fee.exam_month} {fee.exam_year}</span>
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Due Date</span>
+                            <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-danger)' }}>{fee.due_date}</span>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '8px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '12px' }}>
+                            <div>
+                              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Exam Fee</div>
+                              <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'monospace' }}>₹{fee.fee}</div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Breakage</div>
+                              <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: 'monospace' }}>₹{fee.breakage}</div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', background: 'rgba(255,255,255,0.03)', padding: '10px 12px', borderRadius: '6px' }}>
+                            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Paid Amount</span>
+                            <span style={{ fontSize: '14px', fontWeight: 700, color: fee.paid_amt >= (fee.fee + fee.breakage) ? '#22c55e' : '#f59e0b' }}>
+                              ₹{fee.paid_amt}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="prompt-card" style={{ padding: '24px', marginBottom: '32px' }}>
+                      <AlertCircle size={28} className="prompt-icon" />
+                      <h3>No outstanding exam fees</h3>
+                      <p>You have no pending exam fee registrations at this time.</p>
+                    </div>
+                  )}
+
+                  {/* Payment History */}
+                  <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '16px' }}>Payment & Receipt History</h3>
+                  {Object.keys(session.examFeeData.history).length > 0 ? (
+                    <div className="glass-panel" style={{ padding: '20px', overflowX: 'auto' }}>
+                      <table className="cat-table">
+                        <thead>
+                          <tr>
+                            <th>Exam Session</th>
+                            <th>Paid Amount</th>
+                            <th>Payment Date</th>
+                            <th>Transaction / Bank Ref ID</th>
+                            <th>Mode</th>
+                            <th className="text-center">Receipt</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Object.entries(session.examFeeData.history).map(([sessionName, historyItems]) =>
+                            historyItems.map((item, idx) => (
+                              <tr key={`${sessionName}-${idx}`}>
+                                <td style={{ fontWeight: 600 }}>{sessionName}</td>
+                                <td className="font-mono" style={{ color: '#22c55e', fontWeight: 700 }}>₹{item.paid_amt}</td>
+                                <td>{item.paid_date}</td>
+                                <td>
+                                  <div style={{ fontSize: '13px' }}>Txn: <span className="font-mono">{item.transaction_id || '—'}</span></div>
+                                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Ref: <span className="font-mono">{item.bank_ref_id || '—'}</span></div>
+                                </td>
+                                <td>
+                                  <span className="profile-badge-pill profile-badge-reg" style={{ fontSize: '11px' }}>{item.payment_mode}</span>
+                                </td>
+                                <td className="text-center">
+                                  {item.history_id ? (
+                                    <button
+                                      onClick={() => handleDownloadReceipt(item.history_id)}
+                                      disabled={receiptDownloading === item.history_id}
+                                      className="btn-ghost-sm"
+                                      style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', border: '1px solid rgba(255,255,255,0.08)' }}
+                                    >
+                                      {receiptDownloading === item.history_id ? (
+                                        <Loader2 size={12} className="animate-spin" />
+                                      ) : (
+                                        <FileText size={12} />
+                                      )}
+                                      Download
+                                    </button>
+                                  ) : (
+                                    <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>N/A</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="prompt-card" style={{ padding: '24px' }}>
+                      <AlertCircle size={28} className="prompt-icon" />
+                      <h3>No Payment History</h3>
+                      <p>No past exam fee payment transaction records were found for your account.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </main>
       </div>
 
       {/* ── Bottom nav (mobile) ───────────────────────────────────────────── */}
       <nav className="bottom-nav">
-        {navItems.map(({ tab, label, icon }) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`bottom-nav-item ${activeTab === tab ? 'bottom-nav-item-active' : ''}`}
-          >
-            {icon}
-            <span>{label}</span>
-          </button>
-        ))}
+        {navItems
+          .filter(({ tab }) => ['overview', 'results', 'attendance', 'profile'].includes(tab))
+          .map(({ tab, label, icon }) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`bottom-nav-item ${activeTab === tab ? 'bottom-nav-item-active' : ''}`}
+            >
+              {icon}
+              <span>{label}</span>
+            </button>
+          ))}
       </nav>
     </div>
   );

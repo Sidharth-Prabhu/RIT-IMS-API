@@ -113,6 +113,41 @@ export interface AssignmentMark {
   total: string;
 }
 
+export interface ExamFeeItem {
+  ay: number;
+  fee: number;
+  breakage: number;
+  active: string;
+  semester: number;
+  exam_month: string;
+  exam_year: string;
+  due_date: string;
+  paid_amt: number;
+  get_ay?: {
+    id: number;
+    name: string;
+  };
+}
+
+export interface ExamFeeHistoryItem {
+  exam_month: string;
+  exam_year: string;
+  history_id: string;
+  paid_amt: number;
+  paid_date: string;
+  payment_mode: string;
+  status: string;
+  transaction_id: string;
+  bank_ref_id: string;
+  via: string;
+  receipt_status: number;
+}
+
+export interface ExamFeeData {
+  fees: ExamFeeItem[];
+  history: Record<string, ExamFeeHistoryItem[]>;
+}
+
 export interface FeeYearItem {
   academicYear: string;
   paidDate: string;
@@ -152,6 +187,7 @@ export interface AcademicData {
   profile?: StudentProfile;
   assignmentMarks?: AssignmentMark[];
   feeData?: AcademicFeeData;
+  examFeeData?: ExamFeeData;
 }
 
 export interface GradeDistribution {
@@ -198,6 +234,7 @@ export interface ProcessedAcademicData {
   profile?: StudentProfile;
   assignmentMarks?: AssignmentMark[];
   feeData?: AcademicFeeData;
+  examFeeData?: ExamFeeData;
 }
 
 export function processAcademicData(raw: AcademicData): ProcessedAcademicData {
@@ -258,5 +295,6 @@ export function processAcademicData(raw: AcademicData): ProcessedAcademicData {
     profile: raw.profile,
     assignmentMarks: raw.assignmentMarks,
     feeData: raw.feeData,
+    examFeeData: raw.examFeeData,
   };
 }

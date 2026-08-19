@@ -799,6 +799,84 @@ export default async (request: Request, context: Context) => {
     }
   }
 
+  // 11.3. Exam Fee Endpoint
+  if (path === "/api/student/exam-fee" && request.method === "GET") {
+    const headers = getUpstreamHeaders(session.cookies, session.csrfToken);
+    headers.set("X-Requested-With", "XMLHttpRequest");
+    headers.set("Content-Type", "application/x-www-form-urlencoded");
+
+    try {
+      // 1. Fetch current fees
+      const feeRes = await fetch("https://ims.ritchennai.edu.in/admin/exam-fee/get-data", {
+        method: "POST",
+        headers
+      });
+      const feeText = await feeRes.text();
+      if (!checkSessionValidity(feeText, feeRes)) {
+        return errorResponse("IMS_SESSION_EXPIRED", "The upstream IMS session has expired. Please authenticate again.", 401);
+      }
+      const feeJson = JSON.parse(feeText);
+
+      // 2. Fetch history
+      const historyRes = await fetch("https://ims.ritchennai.edu.in/admin/exam-fee-details/get-history", {
+        method: "POST",
+        headers
+      });
+      const historyText = await historyRes.text();
+      const historyJson = JSON.parse(historyText);
+
+      return jsonResponse({
+        success: true,
+        data: {
+          fees: feeJson.status && feeJson.data ? feeJson.data : [],
+          history: historyJson.status && historyJson.data ? historyJson.data : {}
+        }
+      }, 200, corsHeaders);
+
+    } catch (err: any) {
+      return errorResponse("UPSTREAM_ERROR", `Failed to retrieve exam fees: ${err.message}`, 502);
+    }
+  }
+
+  // 11.4. Exam Fee Receipt Download Endpoint
+  if (path === "/api/student/exam-fee/receipt" && request.method === "GET") {
+    const historyId = url.searchParams.get("history_id") || "";
+    if (!historyId) {
+      return errorResponse("INVALID_REQUEST", "Missing history_id parameter.", 400);
+    }
+
+    const headers = getUpstreamHeaders(session.cookies);
+    try {
+      const receiptRes = await fetch(`https://ims.ritchennai.edu.in/admin/exam-fee-details/download-receipt/${historyId}`, {
+        method: "GET",
+        headers
+      });
+
+      if (!receiptRes.ok) {
+        return errorResponse("UPSTREAM_ERROR", `Upstream returned status ${receiptRes.status}`, 502);
+      }
+
+      if (receiptRes.url.includes("/login")) {
+        return errorResponse("IMS_SESSION_EXPIRED", "The upstream IMS session has expired. Please authenticate again.", 401);
+      }
+
+      const receiptBuffer = await receiptRes.arrayBuffer();
+
+      const resHeaders = new Headers(corsHeaders);
+      resHeaders.set("Content-Type", "application/pdf");
+      resHeaders.set("Content-Disposition", `attachment; filename="exam_receipt_${historyId.slice(0, 8)}.pdf"`);
+      resHeaders.set("Cache-Control", "no-store");
+
+      return new Response(receiptBuffer, {
+        status: 200,
+        headers: resHeaders
+      });
+
+    } catch (err: any) {
+      return errorResponse("UPSTREAM_UNAVAILABLE", `Failed to retrieve receipt: ${err.message}`, 502);
+    }
+  }
+
   // 12. Fee Endpoint
   if (path === "/api/student/fees" && request.method === "GET") {
     // Requires authenticated CSRF token

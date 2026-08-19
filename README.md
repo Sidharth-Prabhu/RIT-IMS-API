@@ -195,6 +195,40 @@ curl -s -H "Authorization: Bearer $API_TOKEN" \
   "https://ims-api.sidharthprabhu.co.in/api/student/fees"
 ```
 
+#### J. Exam Fees & Payment History
+Retrieves outstanding semester exam fees and complete payment transaction logs:
+- **Endpoint**: `GET /api/student/exam-fee`
+
+```bash
+curl -s -H "Authorization: Bearer $API_TOKEN" \
+  "https://ims-api.sidharthprabhu.co.in/api/student/exam-fee"
+```
+
+#### K. Download Exam Fee Receipt
+Retrieves the binary payment receipt PDF for a past transaction:
+- **Endpoint**: `GET /api/student/exam-fee/receipt?history_id=X`
+
+##### Mac / Linux (Bash/Zsh)
+```bash
+curl -s -H "Authorization: Bearer $API_TOKEN" \
+  "https://ims-api.sidharthprabhu.co.in/api/student/exam-fee/receipt?history_id=YOUR_HISTORY_ID" \
+  -o exam_receipt.pdf
+```
+
+##### Windows PowerShell
+```powershell
+curl.exe -s -H "Authorization: Bearer $env:API_TOKEN" `
+  "https://ims-api.sidharthprabhu.co.in/api/student/exam-fee/receipt?history_id=YOUR_HISTORY_ID" `
+  -o exam_receipt.pdf
+```
+
+##### Windows Command Prompt (CMD)
+```cmd
+curl -s -H "Authorization: Bearer %API_TOKEN%" ^
+  "https://ims-api.sidharthprabhu.co.in/api/student/exam-fee/receipt?history_id=YOUR_HISTORY_ID" ^
+  -o exam_receipt.pdf
+```
+
 ---
 
 ### 2.3 Diagnostics / Health

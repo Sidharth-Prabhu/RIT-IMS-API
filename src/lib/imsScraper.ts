@@ -1,4 +1,4 @@
-import type { StudentInfo, Subject, Semester, CatMark, AttendanceEntry, Timetable, TimetableEntry, StudentProfile, ProfileSection, ProfileField, LeaveEntry, AssignmentMark, AcademicFeeData, FeeYearItem } from './processData';
+import type { StudentInfo, Subject, Semester, CatMark, AttendanceEntry, Timetable, TimetableEntry, StudentProfile, ProfileSection, ProfileField, LeaveEntry, AssignmentMark, AcademicFeeData, FeeYearItem, ExamFeeData } from './processData';
 
 // ─── Credit Estimation ───────────────────────────────────────────────────────
 
@@ -932,4 +932,33 @@ export async function fetchAcademicFee(csrfToken: string): Promise<AcademicFeeDa
     console.error('Failed to fetch academic fee:', err);
     return null;
   }
+}
+
+export async function fetchExamFeeData(csrfToken: string): Promise<ExamFeeData> {
+  const feeRes = await fetch('/ims/admin/exam-fee/get-data', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'X-CSRF-TOKEN': csrfToken,
+      'X-Requested-With': 'XMLHttpRequest'
+    }
+  });
+  if (!feeRes.ok) throw new Error(`HTTP ${feeRes.status} fetching current exam fees`);
+  const feeJson = await feeRes.json();
+
+  const historyRes = await fetch('/ims/admin/exam-fee-details/get-history', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'X-CSRF-TOKEN': csrfToken,
+      'X-Requested-With': 'XMLHttpRequest'
+    }
+  });
+  if (!historyRes.ok) throw new Error(`HTTP ${historyRes.status} fetching exam fee history`);
+  const historyJson = await historyRes.json();
+
+  return {
+    fees: feeJson.status && feeJson.data ? feeJson.data : [],
+    history: historyJson.status && historyJson.data ? historyJson.data : {}
+  };
 }
