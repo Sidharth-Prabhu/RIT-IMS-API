@@ -1,194 +1,218 @@
-# RIT IMS Data Retrieval Guide (Cross-Platform)
+# RIT IMS Server-Side API Specification & curl Guide
 
-This document outlines the correct `curl` commands to fetch student and academic data from your **Netlify deployed proxy** across different operating systems (**macOS, Linux, and Windows**).
+This documentation details the cross-platform, server-side REST API hosted at:
+`https://ims-api.sidharthprabhu.co.in/api`
 
-The proxy endpoint redirects paths under `/ims/*` to the real portal (`https://ims.ritchennai.edu.in`). To retrieve data, you must:
-1. **Initialize a session** and capture the CSRF token.
-2. **Authenticate (Log in)** to bind session cookies.
-3. **Execute requests** using the cookies and CSRF headers.
+Unlike direct proxies, this API manages upstream sessions statelessly using encrypted, opaque session tokens (`API_SESSION_TOKEN`). Clients do not need to parse raw HTML or manage CSRF/cookies manually.
 
 ---
 
-## 1. Environment Variable & Cookie Syntax by System
+## 1. Authentication Endpoints
 
-Select the terminal environment you are using below to set up your variables:
+### 1.1 Login
 
-### Option A: macOS / Linux / Git Bash / WSL (Bash/Zsh)
-```bash
-export IMS_USER="YOUR_REGISTER_NUMBER"
-export IMS_PASS="YOUR_PASSWORD"
-export BASE_URL="https://YOUR_APP_SUBDOMAIN.netlify.app/ims"
-```
+* **Endpoint**: `POST /api/auth/login`
+* **Content-Type**: `application/json`
 
-### Option B: Windows PowerShell
-```powershell
-$env:IMS_USER="YOUR_REGISTER_NUMBER"
-$env:IMS_PASS="YOUR_PASSWORD"
-$env:BASE_URL="https://YOUR_APP_SUBDOMAIN.netlify.app/ims"
-```
-
-### Option C: Windows Command Prompt (CMD)
-```cmd
-set IMS_USER=YOUR_REGISTER_NUMBER
-set IMS_PASS=YOUR_PASSWORD
-set BASE_URL=https://YOUR_APP_SUBDOMAIN.netlify.app/ims
-```
-
----
-
-## 2. Authentication Flow
-
-To log in, you must first pull the CSRF token. The method to extract this token varies by shell:
-
-### Step 1: Extract CSRF Token & Save Session Cookie
-
-#### On macOS / Linux / Git Bash (Bash/Zsh):
-```bash
-CSRF_TOKEN=$(curl -s -c cookies.txt "$BASE_URL/login" | grep -oE 'name="csrf-token" content="([^"]+)"' | cut -d'"' -f4)
-echo "CSRF Token: $CSRF_TOKEN"
-```
-
-#### On Windows PowerShell:
-Using PowerShell's native regex parsing:
-```powershell
-$html = curl.exe -s -c cookies.txt "$env:BASE_URL/login"
-if ($html -match 'name="csrf-token" content="([^"]+)"') {
-    $env:CSRF_TOKEN = $Matches[1]
+#### Request Payload
+```json
+{
+  "username": "YOUR_REGISTER_NUMBER",
+  "password": "YOUR_PASSWORD"
 }
-Write-Output "CSRF Token: $env:CSRF_TOKEN"
 ```
 
-#### On Windows Command Prompt (CMD):
-Since CMD lacks a native extraction tool like grep, it is easiest to save the page first and check the output manually, or use a quick Node command (since Node is installed for this project):
-```cmd
-curl -s -c cookies.txt "%BASE_URL%/login" -o login.html
-:: Run Node to pull the token from the file:
-for /f "delims=" %i in ('node -e "const fs=require('fs'); const m=fs.readFileSync('login.html','utf8').match(/name=\x22csrf-token\x22 content=\x22([^\x22]+)\x22/); console.log(m ? m[1] : '');"') do set CSRF_TOKEN=%i
-echo CSRF Token: %CSRF_TOKEN%
-```
-
----
-
-### Step 2: Authenticate (Log In)
-
-#### On macOS / Linux / Git Bash (Bash/Zsh):
+#### curl Command (Bash / Linux / macOS)
 ```bash
-curl -s -b cookies.txt -c cookies.txt -L "$BASE_URL/login" \
-  -X POST \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -H "X-CSRF-TOKEN: $CSRF_TOKEN" \
-  -H "X-Requested-With: XMLHttpRequest" \
-  --data-urlencode "_token=$CSRF_TOKEN" \
-  --data-urlencode "email=$IMS_USER" \
-  --data-urlencode "password=$IMS_PASS" \
-  -o /dev/null
+export BASE_URL="https://ims-api.sidharthprabhu.co.in"
+
+LOGIN_RESPONSE=$(curl -s -X POST "$BASE_URL/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "YOUR_REGISTER_NUMBER",
+    "password": "YOUR_PASSWORD"
+  }')
+
+echo "$LOGIN_RESPONSE"
 ```
 
-#### On Windows PowerShell:
-*(Note: Always use `curl.exe` in PowerShell to bypass the default alias to `Invoke-WebRequest`)*
+#### Extract Token (requires `jq`)
+```bash
+export API_TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.session')
+echo "Token: $API_TOKEN"
+```
+
+#### Windows PowerShell
 ```powershell
-curl.exe -s -b cookies.txt -c cookies.txt -L "$env:BASE_URL/login" `
-  -X POST `
-  -H "Content-Type: application/x-www-form-urlencoded" `
-  -H "X-CSRF-TOKEN: $env:CSRF_TOKEN" `
-  -H "X-Requested-With: XMLHttpRequest" `
-  --data-urlencode "_token=$env:CSRF_TOKEN" `
-  --data-urlencode "email=$env:IMS_USER" `
-  --data-urlencode "password=$env:IMS_PASS" `
-  -o NUL
+$baseUrl = "https://ims-api.sidharthprabhu.co.in"
+$body = @{
+    username = "YOUR_REGISTER_NUMBER"
+    password = "YOUR_PASSWORD"
+} | ConvertTo-Json
+
+$response = curl.exe -s -X POST "$baseUrl/api/auth/login" `
+  -H "Content-Type: application/json" `
+  -d $body
+
+$env:API_TOKEN = ($response | ConvertFrom-Json).session
+Write-Output "Token: $env:API_TOKEN"
 ```
 
-#### On Windows Command Prompt (CMD):
+#### Windows Command Prompt (CMD)
 ```cmd
-curl -s -b cookies.txt -c cookies.txt -L "%BASE_URL%/login" ^
-  -X POST ^
-  -H "Content-Type: application/x-www-form-urlencoded" ^
-  -H "X-CSRF-TOKEN: %CSRF_TOKEN%" ^
-  -H "X-Requested-With: XMLHttpRequest" ^
-  --data-urlencode "_token=%CSRF_TOKEN%" ^
-  --data-urlencode "email=%IMS_USER%" ^
-  --data-urlencode "password=%IMS_PASS%" ^
-  -o NUL
+set BASE_URL=https://ims-api.sidharthprabhu.co.in
+
+:: Perform login
+curl -s -X POST "%BASE_URL%/api/auth/login" -H "Content-Type: application/json" -d "{\"username\":\"YOUR_REGISTER_NUMBER\",\"password\":\"YOUR_PASSWORD\"}" > response.json
+
+:: Extract using Node (if installed)
+for /f "delims=" %i in ('node -e "console.log(require('./response.json').session)"') do set API_TOKEN=%i
+echo Token: %API_TOKEN%
 ```
 
 ---
 
-## 3. Data Retrieval Endpoints
+### 1.2 Logout
 
-Once authenticated, choose the appropriate syntax for your command line to fetch data.
-
-### 3.1. Fetch Semester Grades (POST)
-Replace `semester=1` with the desired semester number.
-
-* **macOS / Linux / Bash:**
-  ```bashI wan
-  curl -s -b cookies.txt "$BASE_URL/admin/grade/student/mark/get_marks" \
-    -X POST \
-    -H "Content-Type: application/x-www-form-urlencoded; charset=UTF-8" \
-    -H "X-CSRF-TOKEN: $CSRF_TOKEN" \
-    -H "X-Requested-With: XMLHttpRequest" \
-    --data-urlencode "semester=1"
-  ```
-* **Windows PowerShell:**
-  ```powershell
-  curl.exe -s -b cookies.txt "$env:BASE_URL/admin/grade/student/mark/get_marks" `
-    -X POST `
-    -H "Content-Type: application/x-www-form-urlencoded; charset=UTF-8" `
-    -H "X-CSRF-TOKEN: $env:CSRF_TOKEN" `
-    -H "X-Requested-With: XMLHttpRequest" `
-    --data-urlencode "semester=1"
-  ```
-* **Windows Command Prompt (CMD):**
-  ```cmd
-  curl -s -b cookies.txt "%BASE_URL%/admin/grade/student/mark/get_marks" ^
-    -X POST ^
-    -H "Content-Type: application/x-www-form-urlencoded; charset=UTF-8" ^
-    -H "X-CSRF-TOKEN: %CSRF_TOKEN%" ^
-    -H "X-Requested-With: XMLHttpRequest" ^
-    --data-urlencode "semester=1"
-  ```
-
-### 3.2. Fetch Academic Fee (GET)
-
-* **macOS / Linux / Bash:**
-  ```bash
-  curl -s -b cookies.txt "$BASE_URL/admin/fee-payment/get-data" \
-    -H "X-CSRF-TOKEN: $CSRF_TOKEN" \
-    -H "X-Requested-With: XMLHttpRequest"
-  ```
-* **Windows PowerShell:**
-  ```powershell
-  curl.exe -s -b cookies.txt "$env:BASE_URL/admin/fee-payment/get-data" `
-    -H "X-CSRF-TOKEN: $env:CSRF_TOKEN" `
-    -H "X-Requested-With: XMLHttpRequest"
-  ```
-* **Windows Command Prompt (CMD):**
-  ```cmd
-  curl -s -b cookies.txt "%BASE_URL%/admin/fee-payment/get-data" ^
-    -H "X-CSRF-TOKEN: %CSRF_TOKEN%" ^
-    -H "X-Requested-With: XMLHttpRequest"
-  ```
-
-### 3.3. Fetch Other Pages (GET)
-To request simple pages (CAT Marks, Profile, Attendance, Timetable, Leaves), you only need the cookie session file. This syntax is identical across all systems:
+* **Endpoint**: `POST /api/auth/logout`
+* **Headers**: `Authorization: Bearer <API_SESSION_TOKEN>`
 
 ```bash
-# CAT Marks
-curl -s -b cookies.txt [URL]/admin/student-cat-mark/report
-
-# Assignment Marks
-curl -s -b cookies.txt [URL]/admin/assignment/student/mark/report
-
-# Profile Details
-curl -s -b cookies.txt [URL]/admin/students/Profile-view
-
-# Attendance Report
-curl -s -b cookies.txt [URL]/admin/student-personal-attendance/report
-
-# Timetable
-curl -s -b cookies.txt [URL]/admin/student-time-table
-
-# Leave History
-curl -s -b cookies.txt [URL]/admin/student-request-leaves/index
+curl -s -X POST "$BASE_URL/api/auth/logout" \
+  -H "Authorization: Bearer $API_TOKEN"
 ```
-*(Replace `[URL]` with `$BASE_URL` on Bash, `$env:BASE_URL` on PowerShell, or `%BASE_URL%` on CMD).*
+
+---
+
+## 2. Student Data Endpoints
+
+Every authenticated request requires the Bearer Token in the `Authorization` header:
+`Authorization: Bearer API_SESSION_TOKEN`
+
+### 2.1 Student Profile
+* **Endpoint**: `GET /api/student/profile`
+
+```bash
+curl -s -H "Authorization: Bearer $API_TOKEN" "$BASE_URL/api/student/profile"
+```
+**Example Output:**
+```json
+{
+  "success": true,
+  "data": {
+    "name": "Student Name",
+    "register_number": "211724...",
+    "department": "Computer Science and Engineering",
+    "batch": "2024-2028"
+  }
+}
+```
+
+### 2.2 Semester Results
+* **Endpoint**: `GET /api/student/results?semester=X`
+* **Query Parameter**: `semester` (value from 1 to 8)
+
+```bash
+curl -s -H "Authorization: Bearer $API_TOKEN" "$BASE_URL/api/student/results?semester=1"
+```
+**Example Output:**
+```json
+{
+  "success": true,
+  "semester": 1,
+  "data": [
+    {
+      "course_code": "CS3401",
+      "course_name": "Algorithms",
+      "internal_mark": 38,
+      "external_mark": 50,
+      "total_mark": 88,
+      "grade": "A+",
+      "result": "PASS"
+    }
+  ]
+}
+```
+
+### 2.3 Attendance
+* **Endpoint**: `GET /api/student/attendance`
+
+```bash
+curl -s -H "Authorization: Bearer $API_TOKEN" "$BASE_URL/api/student/attendance"
+```
+
+### 2.4 Time Table
+* **Endpoint**: `GET /api/student/timetable`
+
+```bash
+curl -s -H "Authorization: Bearer $API_TOKEN" "$BASE_URL/api/student/timetable"
+```
+
+### 2.5 CAT Marks (Internals)
+* **Endpoint**: `GET /api/student/cat-marks`
+
+```bash
+curl -s -H "Authorization: Bearer $API_TOKEN" "$BASE_URL/api/student/cat-marks"
+```
+
+### 2.6 Assignment Marks
+* **Endpoint**: `GET /api/student/assignment-marks`
+
+```bash
+curl -s -H "Authorization: Bearer $API_TOKEN" "$BASE_URL/api/student/assignment-marks"
+```
+
+### 2.7 Leaves & OD History
+* **Endpoint**: `GET /api/student/leaves`
+
+```bash
+curl -s -H "Authorization: Bearer $API_TOKEN" "$BASE_URL/api/student/leaves"
+```
+
+### 2.8 Academic Fees
+* **Endpoint**: `GET /api/student/fees`
+
+```bash
+curl -s -H "Authorization: Bearer $API_TOKEN" "$BASE_URL/api/student/fees"
+```
+
+---
+
+## 3. Diagnostics & Health Check
+
+### 3.1 Local API Status
+```bash
+curl -s "$BASE_URL/api/health"
+```
+**Response:**
+```json
+{"success":true,"status":"ok"}
+```
+
+### 3.2 Upstream Connection Check
+Checks if the official portal `https://ims.ritchennai.edu.in` is online and reachable from your edge instance:
+```bash
+curl -s "$BASE_URL/api/health/upstream"
+```
+
+---
+
+## 4. Error Formats
+
+The API returns standard HTTP status codes combined with unified JSON error envelopes:
+
+```json
+{
+  "success": false,
+  "error": "ERROR_CODE",
+  "message": "Human-readable description"
+}
+```
+
+| HTTP Status | Error Code | Description |
+| :--- | :--- | :--- |
+| `400` | `INVALID_SEMESTER` | The requested semester index is not valid. |
+| `401` | `INVALID_CREDENTIALS` | Upstream authentication failed (bad Register No / Password). |
+| `401` | `IMS_SESSION_EXPIRED` | The active session has timed out or expired. |
+| `404` | `NOT_FOUND` | Endpoint does not exist. |
+| `502` | `UPSTREAM_UNAVAILABLE` | RIT IMS portal could not be reached. |

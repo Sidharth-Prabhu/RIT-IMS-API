@@ -2,6 +2,10 @@
 path = "/ims/*"
 function = "ims-proxy"
 
+[[edge-functions]]
+path = "/api/*"
+function = "ims-api"
+
 [build]
   publish = "dist"
   command = "npm run build"
