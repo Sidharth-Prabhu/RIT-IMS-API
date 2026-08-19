@@ -212,6 +212,56 @@ export default async (request: Request, context: Context) => {
       const finalCookies = { ...authCookies, ...parseSetCookies(reportRes.headers.getSetCookie?.() || []) };
       const authenticatedCsrf = reportDoc.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "";
 
+      // Step C.2: Fetch the main admin dashboard to parse metrics
+      let dashboardStats = { cgpa: "N/A", arrears: "N/A", attendance: "N/A", pendingFees: "N/A" };
+      try {
+        const adminRes = await fetch("https://ims.ritchennai.edu.in/admin", {
+          headers: getUpstreamHeaders(finalCookies)
+        });
+        if (adminRes.ok) {
+          const adminHtml = await adminRes.text();
+          const adminDoc = parse(adminHtml);
+          
+          // Parse small-boxes and cards from the admin dashboard
+          const boxes = adminDoc.querySelectorAll(".small-box, .info-box, .inner, .card, .box, div, td");
+          for (const box of boxes) {
+            const text = box.textContent || "";
+            const cleanText = text.replace(/\s+/g, " ").trim();
+            
+            // Look for CGPA
+            if (/cgpa/i.test(cleanText)) {
+              const match = cleanText.match(/(\d+\.\d+)/);
+              if (match && dashboardStats.cgpa === "N/A") {
+                dashboardStats.cgpa = match[1];
+              }
+            }
+            // Look for Arrears
+            if (/arrear/i.test(cleanText)) {
+              const match = cleanText.match(/\b(\d+)\b/);
+              if (match && dashboardStats.arrears === "N/A") {
+                dashboardStats.arrears = match[1];
+              }
+            }
+            // Look for Attendance
+            if (/attendance/i.test(cleanText)) {
+              const match = cleanText.match(/(\d+(?:\.\d+)?\s*%)/) || cleanText.match(/(\d+(?:\.\d+)?)/);
+              if (match && dashboardStats.attendance === "N/A") {
+                dashboardStats.attendance = match[1];
+              }
+            }
+            // Look for Pending Fees
+            if (/(?:pending|due|balance|academic)\s*fee/i.test(cleanText) || /fees?/i.test(cleanText)) {
+              const match = cleanText.match(/(?:Rs\.?|₹)\s*([\d,]+)/) || cleanText.match(/\b([\d,]{4,})\b/);
+              if (match && dashboardStats.pendingFees === "N/A") {
+                dashboardStats.pendingFees = match[1];
+              }
+            }
+          }
+        }
+      } catch (adminErr) {
+        console.warn("Failed to fetch dashboard metrics:", adminErr);
+      }
+
       // Step D: Create Encrypted Opaque Session Token
       const sessionData = {
         cookies: finalCookies,
@@ -224,7 +274,8 @@ export default async (request: Request, context: Context) => {
       return jsonResponse({
         success: true,
         message: "Authentication successful",
-        session: apiToken
+        session: apiToken,
+        dashboard: dashboardStats
       }, 200, corsHeaders);
 
     } catch (err: any) {
