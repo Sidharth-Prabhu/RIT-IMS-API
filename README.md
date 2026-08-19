@@ -2,17 +2,68 @@
 
 **Base URL:** `https://ims-api.sidharthprabhu.co.in`
 
-## Quick Start with curl
+This API provides programmatic access to authenticated student information from the RIT IMS portal.
 
-The API is designed to be usable directly from the command line. You do not need a browser, frontend application, or the upstream IMS cookies.
+The API communicates server-side with:
 
-### 1. Set the API URL
+`https://ims.ritchennai.edu.in`
+
+Clients do **not** need to manage the upstream RIT IMS cookies or CSRF token. The API handles the upstream IMS session internally and returns an API session token to the client.
+
+---
+
+# Quick Start
+
+The API can be used directly from:
+
+- macOS / Linux / Bash / Zsh
+- Windows PowerShell
+- Windows Command Prompt (CMD)
+
+Each step below contains the commands for all supported operating systems. You do not need to jump to a separate Windows section.
+
+---
+
+# Step 1 — Set the API URL
+
+## macOS / Linux / Bash / Zsh
 
 ```bash
 BASE_URL="https://ims-api.sidharthprabhu.co.in"
 ```
 
-### 2. Log in
+## Windows PowerShell
+
+```powershell
+$BaseUrl = "https://ims-api.sidharthprabhu.co.in"
+```
+
+## Windows CMD
+
+```cmd
+set BASE_URL=https://ims-api.sidharthprabhu.co.in
+```
+
+---
+
+# Step 2 — Authenticate
+
+The login endpoint is:
+
+```text
+POST /api/auth/login
+```
+
+Request body:
+
+```json
+{
+  "username": "YOUR_REGISTER_NUMBER",
+  "password": "YOUR_PASSWORD"
+}
+```
+
+## macOS / Linux / Bash / Zsh
 
 ```bash
 LOGIN_RESPONSE=$(curl -s \
@@ -27,7 +78,44 @@ LOGIN_RESPONSE=$(curl -s \
 echo "$LOGIN_RESPONSE"
 ```
 
-Expected response:
+## Windows PowerShell
+
+PowerShell should use `Invoke-RestMethod` for the recommended workflow. It automatically converts the JSON response into a PowerShell object.
+
+```powershell
+$LoginBody = @{
+    username = "YOUR_REGISTER_NUMBER"
+    password = "YOUR_PASSWORD"
+} | ConvertTo-Json -Compress
+
+$Login = Invoke-RestMethod `
+    -Uri "$BaseUrl/api/auth/login" `
+    -Method POST `
+    -ContentType "application/json" `
+    -Body $LoginBody
+
+$Login
+```
+
+A successful PowerShell response will contain properties similar to:
+
+```text
+success message
+------- -------
+True    Authentication successful
+```
+
+It will also contain a `session` property.
+
+## Windows CMD
+
+```cmd
+curl -s -X POST "%BASE_URL%/api/auth/login" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"username\":\"YOUR_REGISTER_NUMBER\",\"password\":\"YOUR_PASSWORD\"}"
+```
+
+A successful response looks like:
 
 ```json
 {
@@ -37,7 +125,13 @@ Expected response:
 }
 ```
 
-### 3. Extract the session token
+---
+
+# Step 3 — Extract the API Session Token
+
+The API returns an opaque session token after successful authentication.
+
+## macOS / Linux / Bash / Zsh
 
 If `jq` is installed:
 
@@ -45,15 +139,69 @@ If `jq` is installed:
 API_TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.session')
 ```
 
-Check that it was extracted:
+Check it:
 
 ```bash
 echo "$API_TOKEN"
 ```
 
-Do not share the token. It represents your authenticated API session.
+Without `jq`, inspect the login response and copy the value of `session` manually:
 
-### 4. Fetch Semester 1 marks
+```bash
+echo "$LOGIN_RESPONSE"
+```
+
+Then:
+
+```bash
+API_TOKEN="YOUR_API_SESSION_TOKEN"
+```
+
+## Windows PowerShell
+
+Because `Invoke-RestMethod` already parses JSON, use:
+
+```powershell
+$ApiToken = $Login.session
+```
+
+Check it:
+
+```powershell
+$ApiToken
+```
+
+**Do not use:**
+
+```powershell
+$ApiToken = ($Login | ConvertFrom-Json).session
+```
+
+That is incorrect when `$Login` was created using `Invoke-RestMethod`.
+
+## Windows CMD
+
+CMD does not have a built-in JSON parser. Copy the `session` value from the login response and set:
+
+```cmd
+set API_TOKEN=YOUR_API_SESSION_TOKEN
+```
+
+---
+
+# Step 4 — Fetch Semester Marks
+
+Endpoint:
+
+```text
+GET /api/student/results?semester=N
+```
+
+`N` can be a semester number from `1` through `8`.
+
+## macOS / Linux / Bash / Zsh
+
+Semester 1:
 
 ```bash
 curl -s \
@@ -61,7 +209,7 @@ curl -s \
   "$BASE_URL/api/student/results?semester=1"
 ```
 
-For formatted JSON:
+Formatted JSON with `jq`:
 
 ```bash
 curl -s \
@@ -69,9 +217,7 @@ curl -s \
   "$BASE_URL/api/student/results?semester=1" | jq .
 ```
 
-### 5. Fetch another semester
-
-Change the `semester` value:
+Semester 2:
 
 ```bash
 curl -s \
@@ -79,11 +225,100 @@ curl -s \
   "$BASE_URL/api/student/results?semester=2" | jq .
 ```
 
-Valid semester values are `1` through `8`.
+Semester 3:
 
-### 6. Fetch other student information
+```bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/results?semester=3" | jq .
+```
 
-Profile:
+For any other semester, change the value:
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/results?semester=4" | jq .
+```
+
+## Windows PowerShell
+
+Semester 1:
+
+```powershell
+$Results = Invoke-RestMethod `
+    -Uri "$BaseUrl/api/student/results?semester=1" `
+    -Method GET `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+    }
+
+$Results | ConvertTo-Json -Depth 10
+```
+
+Semester 2:
+
+```powershell
+$Results = Invoke-RestMethod `
+    -Uri "$BaseUrl/api/student/results?semester=2" `
+    -Method GET `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+    }
+
+$Results | ConvertTo-Json -Depth 10
+```
+
+For another semester, change the value:
+
+```powershell
+$Results = Invoke-RestMethod `
+    -Uri "$BaseUrl/api/student/results?semester=3" `
+    -Method GET `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+    }
+
+$Results | ConvertTo-Json -Depth 10
+```
+
+## Windows CMD
+
+Semester 1:
+
+```cmd
+curl -s ^
+  -H "Authorization: Bearer %API_TOKEN%" ^
+  "%BASE_URL%/api/student/results?semester=1"
+```
+
+Semester 2:
+
+```cmd
+curl -s ^
+  -H "Authorization: Bearer %API_TOKEN%" ^
+  "%BASE_URL%/api/student/results?semester=2"
+```
+
+For another semester, change the value:
+
+```cmd
+curl -s ^
+  -H "Authorization: Bearer %API_TOKEN%" ^
+  "%BASE_URL%/api/student/results?semester=3"
+```
+
+---
+
+# Step 5 — Fetch Student Profile
+
+Endpoint:
+
+```text
+GET /api/student/profile
+```
+
+## macOS / Linux / Bash / Zsh
 
 ```bash
 curl -s \
@@ -91,7 +326,36 @@ curl -s \
   "$BASE_URL/api/student/profile" | jq .
 ```
 
-Attendance:
+## Windows PowerShell
+
+```powershell
+Invoke-RestMethod `
+    -Uri "$BaseUrl/api/student/profile" `
+    -Method GET `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+    } | ConvertTo-Json -Depth 10
+```
+
+## Windows CMD
+
+```cmd
+curl -s ^
+  -H "Authorization: Bearer %API_TOKEN%" ^
+  "%BASE_URL%/api/student/profile"
+```
+
+---
+
+# Step 6 — Fetch Attendance
+
+Endpoint:
+
+```text
+GET /api/student/attendance
+```
+
+## macOS / Linux / Bash / Zsh
 
 ```bash
 curl -s \
@@ -99,7 +363,36 @@ curl -s \
   "$BASE_URL/api/student/attendance" | jq .
 ```
 
-Timetable:
+## Windows PowerShell
+
+```powershell
+Invoke-RestMethod `
+    -Uri "$BaseUrl/api/student/attendance" `
+    -Method GET `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+    } | ConvertTo-Json -Depth 10
+```
+
+## Windows CMD
+
+```cmd
+curl -s ^
+  -H "Authorization: Bearer %API_TOKEN%" ^
+  "%BASE_URL%/api/student/attendance"
+```
+
+---
+
+# Step 7 — Fetch Timetable
+
+Endpoint:
+
+```text
+GET /api/student/timetable
+```
+
+## macOS / Linux / Bash / Zsh
 
 ```bash
 curl -s \
@@ -107,7 +400,36 @@ curl -s \
   "$BASE_URL/api/student/timetable" | jq .
 ```
 
-CAT marks:
+## Windows PowerShell
+
+```powershell
+Invoke-RestMethod `
+    -Uri "$BaseUrl/api/student/timetable" `
+    -Method GET `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+    } | ConvertTo-Json -Depth 10
+```
+
+## Windows CMD
+
+```cmd
+curl -s ^
+  -H "Authorization: Bearer %API_TOKEN%" ^
+  "%BASE_URL%/api/student/timetable"
+```
+
+---
+
+# Step 8 — Fetch CAT Marks
+
+Endpoint:
+
+```text
+GET /api/student/cat-marks
+```
+
+## macOS / Linux / Bash / Zsh
 
 ```bash
 curl -s \
@@ -115,7 +437,36 @@ curl -s \
   "$BASE_URL/api/student/cat-marks" | jq .
 ```
 
-Assignment marks:
+## Windows PowerShell
+
+```powershell
+Invoke-RestMethod `
+    -Uri "$BaseUrl/api/student/cat-marks" `
+    -Method GET `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+    } | ConvertTo-Json -Depth 10
+```
+
+## Windows CMD
+
+```cmd
+curl -s ^
+  -H "Authorization: Bearer %API_TOKEN%" ^
+  "%BASE_URL%/api/student/cat-marks"
+```
+
+---
+
+# Step 9 — Fetch Assignment Marks
+
+Endpoint:
+
+```text
+GET /api/student/assignment-marks
+```
+
+## macOS / Linux / Bash / Zsh
 
 ```bash
 curl -s \
@@ -123,7 +474,36 @@ curl -s \
   "$BASE_URL/api/student/assignment-marks" | jq .
 ```
 
-Leave history:
+## Windows PowerShell
+
+```powershell
+Invoke-RestMethod `
+    -Uri "$BaseUrl/api/student/assignment-marks" `
+    -Method GET `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+    } | ConvertTo-Json -Depth 10
+```
+
+## Windows CMD
+
+```cmd
+curl -s ^
+  -H "Authorization: Bearer %API_TOKEN%" ^
+  "%BASE_URL%/api/student/assignment-marks"
+```
+
+---
+
+# Step 10 — Fetch Leave History
+
+Endpoint:
+
+```text
+GET /api/student/leaves
+```
+
+## macOS / Linux / Bash / Zsh
 
 ```bash
 curl -s \
@@ -131,7 +511,36 @@ curl -s \
   "$BASE_URL/api/student/leaves" | jq .
 ```
 
-Academic fees:
+## Windows PowerShell
+
+```powershell
+Invoke-RestMethod `
+    -Uri "$BaseUrl/api/student/leaves" `
+    -Method GET `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+    } | ConvertTo-Json -Depth 10
+```
+
+## Windows CMD
+
+```cmd
+curl -s ^
+  -H "Authorization: Bearer %API_TOKEN%" ^
+  "%BASE_URL%/api/student/leaves"
+```
+
+---
+
+# Step 11 — Fetch Academic Fees
+
+Endpoint:
+
+```text
+GET /api/student/fees
+```
+
+## macOS / Linux / Bash / Zsh
 
 ```bash
 curl -s \
@@ -139,7 +548,36 @@ curl -s \
   "$BASE_URL/api/student/fees" | jq .
 ```
 
-### 7. Log out
+## Windows PowerShell
+
+```powershell
+Invoke-RestMethod `
+    -Uri "$BaseUrl/api/student/fees" `
+    -Method GET `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+    } | ConvertTo-Json -Depth 10
+```
+
+## Windows CMD
+
+```cmd
+curl -s ^
+  -H "Authorization: Bearer %API_TOKEN%" ^
+  "%BASE_URL%/api/student/fees"
+```
+
+---
+
+# Step 12 — Logout
+
+Endpoint:
+
+```text
+POST /api/auth/logout
+```
+
+## macOS / Linux / Bash / Zsh
 
 ```bash
 curl -s \
@@ -148,224 +586,104 @@ curl -s \
   -H "Authorization: Bearer $API_TOKEN" | jq .
 ```
 
-### Complete example
+## Windows PowerShell
 
-```bash
-BASE_URL="https://ims-api.sidharthprabhu.co.in"
-
-LOGIN_RESPONSE=$(curl -s \
-  -X POST \
-  "$BASE_URL/api/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "YOUR_REGISTER_NUMBER",
-    "password": "YOUR_PASSWORD"
-  }')
-
-API_TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.session')
-
-curl -s \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "$BASE_URL/api/student/results?semester=1" | jq .
+```powershell
+Invoke-RestMethod `
+    -Uri "$BaseUrl/api/auth/logout" `
+    -Method POST `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+    } | ConvertTo-Json -Depth 10
 ```
 
-This is the recommended basic workflow:
+## Windows CMD
+
+```cmd
+curl -s ^
+  -X POST ^
+  "%BASE_URL%/api/auth/logout" ^
+  -H "Authorization: Bearer %API_TOKEN%"
+```
+
+---
+
+# Step 13 — API Health Check
+
+Endpoint:
 
 ```text
-Login
-  ↓
-Receive API session token
-  ↓
-Send token in Authorization header
-  ↓
-Call student endpoints
-  ↓
-Receive JSON
-  ↓
-Logout when finished
+GET /api/health
 ```
 
+No authentication is required.
 
-This API provides programmatic access to authenticated student
-information from the RIT IMS portal.
+## macOS / Linux / Bash / Zsh
 
-The API communicates server-side with:
-
-`https://ims.ritchennai.edu.in`
-
-Clients do **not** need to manage the upstream RIT IMS cookies or CSRF
-token. The API handles the upstream IMS session internally and returns
-an API session token to the client.
-
-------------------------------------------------------------------------
-
-## 1. Architecture
-
-``` text
-Client / curl
-     |
-     | HTTPS
-     v
-https://ims-api.sidharthprabhu.co.in/api/*
-     |
-     | Netlify Edge Function: ims-api
-     v
-https://ims.ritchennai.edu.in
+```bash
+curl -s "$BASE_URL/api/health" | jq .
 ```
 
-The `/api/*` routes are handled by the `ims-api` Edge Function.
+## Windows PowerShell
 
-The legacy `/ims/*` route is a separate proxy and should not be used for
-the new API authentication flow.
-
-------------------------------------------------------------------------
-
-# 2. Authentication
-
-## POST `/api/auth/login`
-
-Authenticate against RIT IMS and create an API session.
-
-### Request
-
-``` http
-POST /api/auth/login
-Content-Type: application/json
+```powershell
+Invoke-RestMethod `
+    -Uri "$BaseUrl/api/health" `
+    -Method GET | ConvertTo-Json -Depth 10
 ```
 
-### Body
+## Windows CMD
 
-``` json
-{
-  "username": "YOUR_REGISTER_NUMBER",
-  "password": "YOUR_PASSWORD"
-}
+```cmd
+curl -s "%BASE_URL%/api/health"
 ```
 
-### curl
+Expected:
 
-``` bash
-curl -s \
-  -X POST \
-  "https://ims-api.sidharthprabhu.co.in/api/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "YOUR_REGISTER_NUMBER",
-    "password": "YOUR_PASSWORD"
-  }'
-```
-
-### Successful response
-
-``` json
-{
-  "success": true,
-  "message": "Authentication successful",
-  "session": "API_SESSION_TOKEN"
-}
-```
-
-The `session` value is an encrypted opaque API session token.
-
-Do not expose or log the user's IMS password.
-
-Do not expose the upstream IMS cookies or CSRF token.
-
-------------------------------------------------------------------------
-
-# 3. Using the API Session
-
-Send the returned session token using:
-
-``` http
-Authorization: Bearer API_SESSION_TOKEN
-```
-
-Example:
-
-``` bash
-API_TOKEN="YOUR_API_SESSION_TOKEN"
-
-curl -s \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "https://ims-api.sidharthprabhu.co.in/api/student/profile"
-```
-
-The API decrypts the token server-side and reconstructs the upstream IMS
-session.
-
-------------------------------------------------------------------------
-
-# 4. Logout
-
-## POST `/api/auth/logout`
-
-Invalidate the current API/IMS session.
-
-### curl
-
-``` bash
-curl -s \
-  -X POST \
-  "https://ims-api.sidharthprabhu.co.in/api/auth/logout" \
-  -H "Authorization: Bearer $API_TOKEN"
-```
-
-### Response
-
-``` json
-{
-  "success": true,
-  "message": "Logged out successfully"
-}
-```
-
-------------------------------------------------------------------------
-
-# 5. Health Check
-
-## GET `/api/health`
-
-Unauthenticated endpoint for checking whether the API is responding.
-
-### curl
-
-``` bash
-curl -s \
-  "https://ims-api.sidharthprabhu.co.in/api/health"
-```
-
-### Response
-
-``` json
+```json
 {
   "success": true,
   "status": "ok"
 }
 ```
 
-The response must be JSON. If this endpoint returns the frontend
-`index.html`, the Netlify `/api/*` Edge Function routing is not working
-correctly.
+If this returns the site's frontend HTML instead of JSON, `/api/*` is not being routed to the `ims-api` Edge Function correctly.
 
-------------------------------------------------------------------------
+---
 
-# 6. Upstream IMS Health Check
+# Step 14 — Upstream IMS Health Check
 
-## GET `/api/health/upstream`
+Endpoint:
 
-Checks whether the RIT IMS portal is reachable.
-
-### curl
-
-``` bash
-curl -s \
-  "https://ims-api.sidharthprabhu.co.in/api/health/upstream"
+```text
+GET /api/health/upstream
 ```
 
-### Example response
+No authentication is required.
 
-``` json
+## macOS / Linux / Bash / Zsh
+
+```bash
+curl -s "$BASE_URL/api/health/upstream" | jq .
+```
+
+## Windows PowerShell
+
+```powershell
+Invoke-RestMethod `
+    -Uri "$BaseUrl/api/health/upstream" `
+    -Method GET | ConvertTo-Json -Depth 10
+```
+
+## Windows CMD
+
+```cmd
+curl -s "%BASE_URL%/api/health/upstream"
+```
+
+Example:
+
+```json
 {
   "success": true,
   "api": "ok",
@@ -373,55 +691,75 @@ curl -s \
 }
 ```
 
-------------------------------------------------------------------------
+---
 
-# 7. Semester Results / Marks
+# API Reference
 
-## GET `/api/student/results`
+## Authentication
 
-Fetch semester marks for the authenticated student.
+### POST `/api/auth/login`
 
-### Query parameter
+Authenticates the user against RIT IMS and creates an API session.
 
-  Parameter    Required   Description
-  ------------ ---------- -----------------------------
-  `semester`   Yes        Semester number from 1 to 8
+Request:
 
-### Example
+```json
+{
+  "username": "YOUR_REGISTER_NUMBER",
+  "password": "YOUR_PASSWORD"
+}
+```
 
-``` text
+Successful response:
+
+```json
+{
+  "success": true,
+  "message": "Authentication successful",
+  "session": "API_SESSION_TOKEN"
+}
+```
+
+The `session` value is an opaque API session token.
+
+---
+
+## Authorization
+
+Authenticated requests use:
+
+```http
+Authorization: Bearer API_SESSION_TOKEN
+```
+
+The client does not need to send:
+
+- `laravel_session`
+- `XSRF-TOKEN`
+- IMS CSRF token
+- IMS cookies
+
+The API handles the upstream IMS session internally.
+
+---
+
+# Semester Results
+
+## GET `/api/student/results?semester=N`
+
+Fetch marks for the authenticated student.
+
+`N` must be a semester number from `1` to `8`.
+
+Example:
+
+```text
 GET /api/student/results?semester=1
 ```
 
-### curl
+Example response:
 
-``` bash
-curl -s \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "https://ims-api.sidharthprabhu.co.in/api/student/results?semester=1"
-```
-
-### Semester 2
-
-``` bash
-curl -s \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "https://ims-api.sidharthprabhu.co.in/api/student/results?semester=2"
-```
-
-### Semester 3
-
-``` bash
-curl -s \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "https://ims-api.sidharthprabhu.co.in/api/student/results?semester=3"
-```
-
-### Successful response
-
-The API normalizes the upstream response into:
-
-``` json
+```json
 {
   "success": true,
   "semester": 1,
@@ -439,477 +777,94 @@ The API normalizes the upstream response into:
 }
 ```
 
-The exact values depend on the student's actual IMS data.
+The exact fields and values depend on the data returned by the upstream IMS.
 
-### Upstream request
+Internally, the API retrieves semester marks from:
 
-The API internally calls:
-
-``` http
+```text
 POST https://ims.ritchennai.edu.in/admin/grade/student/mark/get_marks
 ```
 
 with:
 
-``` text
-semester=1
+```text
+semester=N
 ```
 
-The upstream IMS cookies and CSRF token are handled server-side.
+---
 
-------------------------------------------------------------------------
-
-# 8. Alternative POST Results Request
-
-The results endpoint also accepts POST.
+# Alternative Results POST
 
 ## POST `/api/student/results`
 
-### Request
+Request:
 
-``` http
-POST /api/student/results
-Authorization: Bearer API_SESSION_TOKEN
-Content-Type: application/json
-```
-
-### Body
-
-``` json
+```json
 {
   "semester": 1
 }
 ```
 
-### curl
+## macOS / Linux / Bash / Zsh
 
-``` bash
+```bash
 curl -s \
   -X POST \
-  "https://ims-api.sidharthprabhu.co.in/api/student/results" \
+  "$BASE_URL/api/student/results" \
   -H "Authorization: Bearer $API_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{
-    "semester": 1
-  }'
+  -d '{"semester":1}' | jq .
+```
+
+## Windows PowerShell
+
+```powershell
+$Body = @{
+    semester = 1
+} | ConvertTo-Json -Compress
+
+Invoke-RestMethod `
+    -Uri "$BaseUrl/api/student/results" `
+    -Method POST `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+    } `
+    -ContentType "application/json" `
+    -Body $Body | ConvertTo-Json -Depth 10
+```
+
+## Windows CMD
+
+```cmd
+curl -s ^
+  -X POST ^
+  "%BASE_URL%/api/student/results" ^
+  -H "Authorization: Bearer %API_TOKEN%" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"semester\":1}"
 ```
 
 GET is recommended for simple read-only retrieval.
 
-------------------------------------------------------------------------
+---
 
-# 9. Student Profile
+# Response and Error Handling
 
-## GET `/api/student/profile`
+## Success
 
-Fetch the authenticated student's basic profile information.
+Successful requests return JSON with:
 
-### curl
-
-``` bash
-curl -s \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "https://ims-api.sidharthprabhu.co.in/api/student/profile"
-```
-
-### Response
-
-``` json
+```json
 {
-  "success": true,
-  "data": {
-    "name": "Student Name",
-    "register_number": "123456789",
-    "department": "Artificial Intelligence and Data Science",
-    "batch": "2024-2028"
-  }
+  "success": true
 }
 ```
 
-------------------------------------------------------------------------
-
-# 10. Attendance
-
-## GET `/api/student/attendance`
-
-Fetch the student's attendance.
-
-### curl
-
-``` bash
-curl -s \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "https://ims-api.sidharthprabhu.co.in/api/student/attendance"
-```
-
-### Response format
-
-``` json
-{
-  "success": true,
-  "data": {
-    "subjects": [
-      {
-        "code": "CS1234",
-        "name": "Subject Name",
-        "conducted": 40,
-        "present": 36,
-        "absent": 4,
-        "percentage": 90
-      }
-    ]
-  }
-}
-```
-
-------------------------------------------------------------------------
-
-# 11. Timetable
-
-## GET `/api/student/timetable`
-
-Fetch the student's timetable.
-
-### curl
-
-``` bash
-curl -s \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "https://ims-api.sidharthprabhu.co.in/api/student/timetable"
-```
-
-### Response structure
-
-``` json
-{
-  "success": true,
-  "data": {
-    "schedule": {
-      "monday": {},
-      "tuesday": {},
-      "wednesday": {},
-      "thursday": {},
-      "friday": {},
-      "saturday": {}
-    }
-  }
-}
-```
-
-The actual schedule contents depend on the student's IMS data.
-
-------------------------------------------------------------------------
-
-# 12. CAT Marks
-
-## GET `/api/student/cat-marks`
-
-Fetch CAT/internal examination marks.
-
-### curl
-
-``` bash
-curl -s \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "https://ims-api.sidharthprabhu.co.in/api/student/cat-marks"
-```
-
-### Response format
-
-``` json
-{
-  "success": true,
-  "data": {
-    "subjects": [
-      {
-        "code": "CS1234",
-        "name": "Subject Name",
-        "co1": "20",
-        "co2": "18",
-        "total": "38",
-        "weightage": "19"
-      }
-    ]
-  }
-}
-```
-
-------------------------------------------------------------------------
-
-# 13. Assignment Marks
-
-## GET `/api/student/assignment-marks`
-
-Fetch assignment marks.
-
-### curl
-
-``` bash
-curl -s \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "https://ims-api.sidharthprabhu.co.in/api/student/assignment-marks"
-```
-
-### Response format
-
-``` json
-{
-  "success": true,
-  "data": {
-    "subjects": [
-      {
-        "code": "CS1234",
-        "name": "Subject Name",
-        "a1": "10",
-        "a2": "9",
-        "a3": "10",
-        "a4": "8",
-        "a5": "10",
-        "total": "47"
-      }
-    ]
-  }
-}
-```
-
-------------------------------------------------------------------------
-
-# 14. Leave History
-
-## GET `/api/student/leaves`
-
-Fetch leave history.
-
-### curl
-
-``` bash
-curl -s \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "https://ims-api.sidharthprabhu.co.in/api/student/leaves"
-```
-
-### Response format
-
-``` json
-{
-  "success": true,
-  "data": {
-    "leaves": [
-      {
-        "type": "Leave",
-        "fromDate": "2026-08-01",
-        "toDate": "2026-08-02",
-        "noOfDays": "2",
-        "reason": "Personal",
-        "status": "Approved"
-      }
-    ]
-  }
-}
-```
-
-------------------------------------------------------------------------
-
-# 15. Academic Fees
-
-## GET `/api/student/fees`
-
-Fetch academic fee information.
-
-### curl
-
-``` bash
-curl -s \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "https://ims-api.sidharthprabhu.co.in/api/student/fees"
-```
-
-### Response structure
-
-``` json
-{
-  "success": true,
-  "data": {
-    "total_fee": 100000,
-    "paid": 80000,
-    "pending": 20000,
-    "transactions": []
-  }
-}
-```
-
-------------------------------------------------------------------------
-
-# 16. Complete curl Workflow
-
-The following is the recommended complete Bash workflow.
-
-## Step 1 --- Set API URL
-
-``` bash
-BASE_URL="https://ims-api.sidharthprabhu.co.in"
-```
-
-## Step 2 --- Authenticate
-
-``` bash
-LOGIN_RESPONSE=$(curl -s \
-  -X POST \
-  "$BASE_URL/api/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "YOUR_REGISTER_NUMBER",
-    "password": "YOUR_PASSWORD"
-  }')
-```
-
-## Step 3 --- Inspect login response
-
-``` bash
-echo "$LOGIN_RESPONSE" | jq .
-```
-
-## Step 4 --- Extract API session
-
-``` bash
-API_TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.session')
-```
-
-Verify:
-
-``` bash
-echo "$API_TOKEN"
-```
-
-## Step 5 --- Fetch semester marks
-
-``` bash
-curl -s \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "$BASE_URL/api/student/results?semester=1" | jq .
-```
-
-## Step 6 --- Fetch another semester
-
-``` bash
-curl -s \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "$BASE_URL/api/student/results?semester=2" | jq .
-```
-
-## Step 7 --- Logout
-
-``` bash
-curl -s \
-  -X POST \
-  "$BASE_URL/api/auth/logout" \
-  -H "Authorization: Bearer $API_TOKEN" | jq .
-```
-
-------------------------------------------------------------------------
-
-# 17. One-Line Semester Marks Command
-
-Authenticate and immediately fetch Semester 1:
-
-``` bash
-BASE_URL="https://ims-api.sidharthprabhu.co.in"; API_TOKEN=$(curl -s -X POST "$BASE_URL/api/auth/login" -H "Content-Type: application/json" -d '{"username":"YOUR_REGISTER_NUMBER","password":"YOUR_PASSWORD"}' | jq -r '.session'); curl -s -H "Authorization: Bearer $API_TOKEN" "$BASE_URL/api/student/results?semester=1" | jq .
-```
-
-------------------------------------------------------------------------
-
-# 18. Windows PowerShell
-
-## Login
-
-``` powershell
-$BaseUrl = "https://ims-api.sidharthprabhu.co.in"
-
-$Body = @{
-    username = "YOUR_REGISTER_NUMBER"
-    password = "YOUR_PASSWORD"
-} | ConvertTo-Json
-
-$Login = curl.exe -s `
-    -X POST `
-    "$BaseUrl/api/auth/login" `
-    -H "Content-Type: application/json" `
-    -d $Body
-
-$Login
-```
-
-Extract token:
-
-``` powershell
-$ApiToken = ($Login | ConvertFrom-Json).session
-```
-
-Fetch semester marks:
-
-``` powershell
-curl.exe -s `
-    -H "Authorization: Bearer $ApiToken" `
-    "$BaseUrl/api/student/results?semester=1"
-```
-
-------------------------------------------------------------------------
-
-# 19. Windows CMD
-
-Login:
-
-``` cmd
-curl -s -X POST "https://ims-api.sidharthprabhu.co.in/api/auth/login" ^
-  -H "Content-Type: application/json" ^
-  -d "{\"username\":\"YOUR_REGISTER_NUMBER\",\"password\":\"YOUR_PASSWORD\"}"
-```
-
-Copy the `session` value from the response and set:
-
-``` cmd
-set API_TOKEN=YOUR_API_SESSION_TOKEN
-```
-
-Fetch semester marks:
-
-``` cmd
-curl -s ^
-  -H "Authorization: Bearer %API_TOKEN%" ^
-  "https://ims-api.sidharthprabhu.co.in/api/student/results?semester=1"
-```
-
-------------------------------------------------------------------------
-
-# 20. HTTP Status Codes
-
-    Status Meaning
-  -------- ----------------------------------------
-       200 Successful request
-       400 Invalid request
-       401 Missing/invalid/expired authentication
-       404 API endpoint not found
-       429 Rate limit exceeded
-       502 Upstream IMS failure
-       500 Internal API error
-
-------------------------------------------------------------------------
-
-# 21. Error Format
-
-API errors use:
-
-``` json
-{
-  "success": false,
-  "error": "ERROR_CODE",
-  "message": "Human-readable description"
-}
-```
+Additional fields depend on the endpoint.
 
 ## Invalid credentials
 
-``` json
+```json
 {
   "success": false,
   "error": "INVALID_CREDENTIALS",
@@ -919,13 +874,13 @@ API errors use:
 
 HTTP status:
 
-``` text
+```text
 401
 ```
 
-## Missing authentication
+## Unauthorized
 
-``` json
+```json
 {
   "success": false,
   "error": "UNAUTHORIZED",
@@ -935,13 +890,13 @@ HTTP status:
 
 HTTP status:
 
-``` text
+```text
 401
 ```
 
 ## Expired IMS session
 
-``` json
+```json
 {
   "success": false,
   "error": "IMS_SESSION_EXPIRED",
@@ -951,13 +906,13 @@ HTTP status:
 
 HTTP status:
 
-``` text
+```text
 401
 ```
 
 ## Invalid semester
 
-``` json
+```json
 {
   "success": false,
   "error": "INVALID_SEMESTER",
@@ -967,17 +922,59 @@ HTTP status:
 
 HTTP status:
 
-``` text
+```text
 400
 ```
 
-------------------------------------------------------------------------
+## General error format
 
-# 22. Authentication Flow
+```json
+{
+  "success": false,
+  "error": "ERROR_CODE",
+  "message": "Human-readable description"
+}
+```
 
-The server performs the following process.
+---
 
-``` text
+# HTTP Status Codes
+
+| Status | Meaning |
+|---:|---|
+| 200 | Successful request |
+| 400 | Invalid request |
+| 401 | Missing, invalid, or expired authentication |
+| 404 | API endpoint not found |
+| 429 | Rate limit exceeded |
+| 500 | Internal API error |
+| 502 | Upstream IMS failure |
+
+---
+
+# Architecture
+
+```text
+Client
+  |
+  | HTTPS
+  v
+https://ims-api.sidharthprabhu.co.in/api/*
+  |
+  | Netlify Edge Function: ims-api
+  v
+https://ims.ritchennai.edu.in
+```
+
+The `/api/*` routes are handled by the `ims-api` Edge Function.
+
+The legacy `/ims/*` route is a separate proxy and should not be used for normal API authentication.
+
+---
+
+# Authentication Flow
+
+```text
 POST /api/auth/login
        |
        v
@@ -995,13 +992,13 @@ POST RIT IMS /login
        +-- CSRF token
        |
        v
-Verify authenticated IMS page
+Verify authenticated IMS session
        |
-       +-- obtain authenticated cookies
-       +-- obtain authenticated CSRF token
+       +-- authenticated cookies
+       +-- authenticated CSRF token
        |
        v
-Create encrypted API session token
+Create API session token
        |
        v
 Return token to client
@@ -1009,11 +1006,11 @@ Return token to client
 
 Subsequent requests:
 
-``` text
+```text
 Authorization: Bearer <API_TOKEN>
        |
        v
-Decrypt API session
+Restore API session
        |
        +-- IMS cookies
        +-- IMS CSRF token
@@ -1028,45 +1025,160 @@ Parse response
 Return JSON
 ```
 
-------------------------------------------------------------------------
+---
 
-# 23. Important Client-Side Rules
+# Complete Workflow by Operating System
+
+## macOS / Linux / Bash / Zsh
+
+```bash
+BASE_URL="https://ims-api.sidharthprabhu.co.in"
+
+LOGIN_RESPONSE=$(curl -s \
+  -X POST \
+  "$BASE_URL/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "YOUR_REGISTER_NUMBER",
+    "password": "YOUR_PASSWORD"
+  }')
+
+echo "$LOGIN_RESPONSE" | jq .
+
+API_TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.session')
+
+curl -s \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/results?semester=1" | jq .
+
+curl -s \
+  -X POST \
+  "$BASE_URL/api/auth/logout" \
+  -H "Authorization: Bearer $API_TOKEN" | jq .
+```
+
+## Windows PowerShell
+
+```powershell
+$BaseUrl = "https://ims-api.sidharthprabhu.co.in"
+
+$LoginBody = @{
+    username = "YOUR_REGISTER_NUMBER"
+    password = "YOUR_PASSWORD"
+} | ConvertTo-Json -Compress
+
+$Login = Invoke-RestMethod `
+    -Uri "$BaseUrl/api/auth/login" `
+    -Method POST `
+    -ContentType "application/json" `
+    -Body $LoginBody
+
+$Login
+
+$ApiToken = $Login.session
+
+$Results = Invoke-RestMethod `
+    -Uri "$BaseUrl/api/student/results?semester=1" `
+    -Method GET `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+    }
+
+$Results | ConvertTo-Json -Depth 10
+
+Invoke-RestMethod `
+    -Uri "$BaseUrl/api/auth/logout" `
+    -Method POST `
+    -Headers @{
+        Authorization = "Bearer $ApiToken"
+    } | ConvertTo-Json -Depth 10
+```
+
+**Important:** Since this workflow uses `Invoke-RestMethod`, `$Login` is already a PowerShell object.
+
+Use:
+
+```powershell
+$ApiToken = $Login.session
+```
+
+Do not use:
+
+```powershell
+$ApiToken = ($Login | ConvertFrom-Json).session
+```
+
+## Windows CMD
+
+```cmd
+set BASE_URL=https://ims-api.sidharthprabhu.co.in
+
+curl -s -X POST "%BASE_URL%/api/auth/login" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"username\":\"YOUR_REGISTER_NUMBER\",\"password\":\"YOUR_PASSWORD\"}"
+```
+
+Copy the `session` value:
+
+```cmd
+set API_TOKEN=YOUR_API_SESSION_TOKEN
+```
+
+Fetch Semester 1:
+
+```cmd
+curl -s ^
+  -H "Authorization: Bearer %API_TOKEN%" ^
+  "%BASE_URL%/api/student/results?semester=1"
+```
+
+Logout:
+
+```cmd
+curl -s ^
+  -X POST ^
+  "%BASE_URL%/api/auth/logout" ^
+  -H "Authorization: Bearer %API_TOKEN%"
+```
+
+---
+
+# Important Client-Side Rules
 
 Clients should **not**:
 
--   request `/ims/*` for normal API usage
--   send the upstream `laravel_session` cookie manually
--   send the upstream `XSRF-TOKEN` manually
--   send the upstream CSRF token
--   submit credentials directly to `ims.ritchennai.edu.in`
--   follow upstream IMS redirects themselves
+- request `/ims/*` for normal API usage
+- send upstream `laravel_session` cookies manually
+- send the upstream `XSRF-TOKEN` manually
+- send the upstream CSRF token
+- submit credentials directly to `ims.ritchennai.edu.in`
+- follow upstream IMS redirects themselves
 
-Clients should only communicate with:
+Clients should communicate with:
 
-``` text
+```text
 https://ims-api.sidharthprabhu.co.in/api/*
 ```
 
-and use:
+and authenticate using:
 
-``` http
+```http
 Authorization: Bearer <API_TOKEN>
 ```
 
-------------------------------------------------------------------------
+---
 
-# 24. Security
+# Security
 
-The API handles sensitive student authentication and academic
-information.
+The API handles sensitive student authentication and academic information.
 
 Never log:
 
--   IMS passwords
--   API bearer tokens
--   upstream cookies
--   upstream CSRF tokens
--   unnecessary student academic information
+- IMS passwords
+- API bearer tokens
+- upstream cookies
+- upstream CSRF tokens
+- unnecessary student academic information
 
 Use HTTPS only.
 
@@ -1080,384 +1192,35 @@ Authenticated student data should not be publicly cached.
 
 Responses containing student information should use:
 
-``` http
+```http
 Cache-Control: no-store
 ```
 
-------------------------------------------------------------------------
+---
 
-# 25. API Endpoint Summary
+# API Endpoint Summary
 
-  Method   Endpoint                            Auth
-  -------- ----------------------------------- ------
-  GET      `/api/health`                       No
-  GET      `/api/health/upstream`              No
-  POST     `/api/auth/login`                   No
-  POST     `/api/auth/logout`                  Yes
-  GET      `/api/student/profile`              Yes
-  GET      `/api/student/attendance`           Yes
-  GET      `/api/student/timetable`            Yes
-  GET      `/api/student/cat-marks`            Yes
-  GET      `/api/student/assignment-marks`     Yes
-  GET      `/api/student/leaves`               Yes
-  GET      `/api/student/results?semester=N`   Yes
-  POST     `/api/student/results`              Yes
-  GET      `/api/student/fees`                 Yes
+| Method | Endpoint | Authentication |
+|---|---|---|
+| GET | `/api/health` | No |
+| GET | `/api/health/upstream` | No |
+| POST | `/api/auth/login` | No |
+| POST | `/api/auth/logout` | Yes |
+| GET | `/api/student/profile` | Yes |
+| GET | `/api/student/attendance` | Yes |
+| GET | `/api/student/timetable` | Yes |
+| GET | `/api/student/cat-marks` | Yes |
+| GET | `/api/student/assignment-marks` | Yes |
+| GET | `/api/student/leaves` | Yes |
+| GET | `/api/student/results?semester=N` | Yes |
+| POST | `/api/student/results` | Yes |
+| GET | `/api/student/fees` | Yes |
 
-------------------------------------------------------------------------
+---
 
-# 26. Quick Reference
-
-``` bash
-# Base URL
-BASE_URL="https://ims-api.sidharthprabhu.co.in"
-
-# Health
-curl -s "$BASE_URL/api/health"
-
-# Login
-LOGIN=$(curl -s -X POST "$BASE_URL/api/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"YOUR_REGISTER_NUMBER","password":"YOUR_PASSWORD"}')
-
-# Token
-API_TOKEN=$(echo "$LOGIN" | jq -r '.session')
-
-# Semester 1
-curl -s \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "$BASE_URL/api/student/results?semester=1" | jq .
-
-# Semester 2
-curl -s \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "$BASE_URL/api/student/results?semester=2" | jq .
-
-# Profile
-curl -s \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "$BASE_URL/api/student/profile" | jq .
-
-# Attendance
-curl -s \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "$BASE_URL/api/student/attendance" | jq .
-
-# Timetable
-curl -s \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "$BASE_URL/api/student/timetable" | jq .
-
-# CAT marks
-curl -s \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "$BASE_URL/api/student/cat-marks" | jq .
-
-# Assignment marks
-curl -s \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "$BASE_URL/api/student/assignment-marks" | jq .
-
-# Leaves
-curl -s \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "$BASE_URL/api/student/leaves" | jq .
-
-# Fees
-curl -s \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "$BASE_URL/api/student/fees" | jq .
-
-# Logout
-curl -s -X POST \
-  "$BASE_URL/api/auth/logout" \
-  -H "Authorization: Bearer $API_TOKEN" | jq .
-```
-
-------------------------------------------------------------------------
-
-# 27. Troubleshooting
+# Troubleshooting
 
 ## `/api/health` returns HTML
-
-Expected:
-
-``` json
-{
-  "success": true,
-  "status": "ok"
-}
-```
-
-If instead the response contains:
-
-``` html
-<title>ims-test</title>
-```
-
-the request is reaching the frontend SPA rather than the `ims-api` Edge
-Function.
-
-Fix the Netlify `/api/*` routing before testing authentication.
-
-## Login returns 404
-
-Check that:
-
-``` text
-/api/auth/login
-```
-
-is being routed to the `ims-api` Edge Function.
-
-## Results return `IMS_SESSION_EXPIRED`
-
-The API successfully reached the function but the upstream IMS session
-is no longer valid.
-
-Authenticate again.
-
-## Results return `UPSTREAM_ERROR`
-
-The API reached the upstream IMS but could not parse the response as
-expected. Inspect the upstream response structure before changing the
-parser.
-
-## Results return the IMS login HTML
-
-The upstream session was not preserved or has expired. The API must
-detect this and return `401 IMS_SESSION_EXPIRED` rather than returning
-the login HTML.
-
-------------------------------------------------------------------------
-
-# 28. Production Verification
-
-Before considering the API production-ready, verify the following in
-order:
-
-``` bash
-curl -i "$BASE_URL/api/health"
-```
-
-Must return JSON.
-
-Then:
-
-``` bash
-curl -i "$BASE_URL/api/health/upstream"
-```
-
-Must return JSON.
-
-Then:
-
-``` bash
-curl -i -X POST "$BASE_URL/api/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"YOUR_REGISTER_NUMBER","password":"YOUR_PASSWORD"}'
-```
-
-Must return an API session.
-
-Then:
-
-``` bash
-curl -i \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "$BASE_URL/api/student/results?semester=1"
-```
-
-Must return JSON containing semester results.
-
-The client must never receive the upstream IMS login HTML during a
-normal API request.
-
-
-## Windows PowerShell
-
-PowerShell users can use `Invoke-RestMethod` directly. This is the recommended PowerShell approach because the JSON response is automatically converted into a PowerShell object.
-
-If you specifically want to use curl, use `curl.exe`, not `curl`, because `curl` may resolve to PowerShell's `Invoke-WebRequest` alias.
-
-### 1. Set the API URL
-
-```powershell
-$BaseUrl = "https://ims-api.sidharthprabhu.co.in"
-```
-
-### 2. Log in
-
-Replace the register number and password:
-
-```powershell
-$LoginBody = @{
-    username = "YOUR_REGISTER_NUMBER"
-    password = "YOUR_PASSWORD"
-} | ConvertTo-Json -Compress
-
-$Login = Invoke-RestMethod `
-    -Uri "$BaseUrl/api/auth/login" `
-    -Method POST `
-    -ContentType "application/json" `
-    -Body $LoginBody
-
-$Login
-```
-
-A successful login returns an object similar to:
-
-```text
-success message
-------- -------
-True    Authentication successful
-```
-
-The response also contains a `session` property.
-
-### 3. Extract the API session token
-
-Because `Invoke-RestMethod` already parses the JSON response, **do not use `ConvertFrom-Json` here**.
-
-Correct:
-
-```powershell
-$ApiToken = $Login.session
-```
-
-Check it:
-
-```powershell
-$ApiToken
-```
-
-Do not share the token. It represents your authenticated API session.
-
-### 4. Fetch Semester 1 marks
-
-```powershell
-$Results = Invoke-RestMethod `
-    -Uri "$BaseUrl/api/student/results?semester=1" `
-    -Method GET `
-    -Headers @{
-        Authorization = "Bearer $ApiToken"
-    }
-
-$Results | ConvertTo-Json -Depth 10
-```
-
-### 5. Fetch another semester
-
-For Semester 2:
-
-```powershell
-$Results = Invoke-RestMethod `
-    -Uri "$BaseUrl/api/student/results?semester=2" `
-    -Method GET `
-    -Headers @{
-        Authorization = "Bearer $ApiToken"
-    }
-
-$Results | ConvertTo-Json -Depth 10
-```
-
-Valid semester values are `1` through `8`.
-
-### 6. Fetch profile
-
-```powershell
-Invoke-RestMethod `
-    -Uri "$BaseUrl/api/student/profile" `
-    -Method GET `
-    -Headers @{
-        Authorization = "Bearer $ApiToken"
-} | ConvertTo-Json -Depth 10
-```
-
-### 7. Fetch attendance
-
-```powershell
-Invoke-RestMethod `
-    -Uri "$BaseUrl/api/student/attendance" `
-    -Method GET `
-    -Headers @{
-        Authorization = "Bearer $ApiToken"
-} | ConvertTo-Json -Depth 10
-```
-
-### 8. Fetch timetable
-
-```powershell
-Invoke-RestMethod `
-    -Uri "$BaseUrl/api/student/timetable" `
-    -Method GET `
-    -Headers @{
-        Authorization = "Bearer $ApiToken"
-} | ConvertTo-Json -Depth 10
-```
-
-### 9. Fetch CAT marks
-
-```powershell
-Invoke-RestMethod `
-    -Uri "$BaseUrl/api/student/cat-marks" `
-    -Method GET `
-    -Headers @{
-        Authorization = "Bearer $ApiToken"
-} | ConvertTo-Json -Depth 10
-```
-
-### 10. Fetch assignment marks
-
-```powershell
-Invoke-RestMethod `
-    -Uri "$BaseUrl/api/student/assignment-marks" `
-    -Method GET `
-    -Headers @{
-        Authorization = "Bearer $ApiToken"
-} | ConvertTo-Json -Depth 10
-```
-
-### 11. Fetch leave history
-
-```powershell
-Invoke-RestMethod `
-    -Uri "$BaseUrl/api/student/leaves" `
-    -Method GET `
-    -Headers @{
-        Authorization = "Bearer $ApiToken"
-} | ConvertTo-Json -Depth 10
-```
-
-### 12. Fetch academic fees
-
-```powershell
-Invoke-RestMethod `
-    -Uri "$BaseUrl/api/student/fees" `
-    -Method GET `
-    -Headers @{
-        Authorization = "Bearer $ApiToken"
-} | ConvertTo-Json -Depth 10
-```
-
-### 13. Logout
-
-```powershell
-Invoke-RestMethod `
-    -Uri "$BaseUrl/api/auth/logout" `
-    -Method POST `
-    -Headers @{
-        Authorization = "Bearer $ApiToken"
-} | ConvertTo-Json -Depth 10
-```
-
-### 14. Health check
-
-```powershell
-Invoke-RestMethod `
-    -Uri "$BaseUrl/api/health" `
-    -Method GET | ConvertTo-Json -Depth 10
-```
 
 Expected:
 
@@ -1468,13 +1231,105 @@ Expected:
 }
 ```
 
-### 15. Complete PowerShell workflow
+If the response is the frontend `index.html`, the request is reaching the SPA instead of the `ims-api` Edge Function.
 
-This is the recommended copy-paste workflow:
+Fix the Netlify `/api/*` routing.
+
+## Login returns 404
+
+Verify that:
+
+```text
+/api/auth/login
+```
+
+is routed to the `ims-api` Edge Function.
+
+## PowerShell says `ConvertFrom-Json` is invalid
+
+If login was performed using:
 
 ```powershell
-$BaseUrl = "https://ims-api.sidharthprabhu.co.in"
+$Login = Invoke-RestMethod ...
+```
 
+use:
+
+```powershell
+$ApiToken = $Login.session
+```
+
+Do not pipe `$Login` into `ConvertFrom-Json`.
+
+## Results return `UNAUTHORIZED`
+
+Verify that the token exists:
+
+```powershell
+$ApiToken
+```
+
+or:
+
+```bash
+echo "$API_TOKEN"
+```
+
+The request must contain:
+
+```http
+Authorization: Bearer <API_TOKEN>
+```
+
+## Results return `IMS_SESSION_EXPIRED`
+
+Authenticate again to create a new API session.
+
+## Results return the IMS login HTML
+
+The upstream IMS session was not preserved or has expired. The API should detect this and return `401 IMS_SESSION_EXPIRED` rather than exposing the IMS login HTML.
+
+---
+
+# Production Verification
+
+Verify the API in this order.
+
+## macOS / Linux
+
+```bash
+curl -i "$BASE_URL/api/health"
+```
+
+```bash
+curl -i "$BASE_URL/api/health/upstream"
+```
+
+```bash
+curl -i -X POST "$BASE_URL/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"YOUR_REGISTER_NUMBER","password":"YOUR_PASSWORD"}'
+```
+
+Then:
+
+```bash
+curl -i \
+  -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE_URL/api/student/results?semester=1"
+```
+
+## Windows PowerShell
+
+```powershell
+Invoke-RestMethod "$BaseUrl/api/health" | ConvertTo-Json -Depth 10
+```
+
+```powershell
+Invoke-RestMethod "$BaseUrl/api/health/upstream" | ConvertTo-Json -Depth 10
+```
+
+```powershell
 $LoginBody = @{
     username = "YOUR_REGISTER_NUMBER"
     password = "YOUR_PASSWORD"
@@ -1486,68 +1341,41 @@ $Login = Invoke-RestMethod `
     -ContentType "application/json" `
     -Body $LoginBody
 
-if (-not $Login.success) {
-    Write-Error "Login failed: $($Login.message)"
-    exit 1
-}
-
 $ApiToken = $Login.session
+```
 
-if (-not $ApiToken) {
-    Write-Error "Login succeeded but no API session token was returned."
-    exit 1
-}
+Then:
 
-$Results = Invoke-RestMethod `
+```powershell
+Invoke-RestMethod `
     -Uri "$BaseUrl/api/student/results?semester=1" `
-    -Method GET `
     -Headers @{
         Authorization = "Bearer $ApiToken"
-    }
-
-$Results | ConvertTo-Json -Depth 10
+    } | ConvertTo-Json -Depth 10
 ```
 
-### Important PowerShell distinction
+## Windows CMD
 
-With `Invoke-RestMethod`:
-
-```powershell
-$Login = Invoke-RestMethod ...
-$ApiToken = $Login.session
+```cmd
+curl -i "%BASE_URL%/api/health"
 ```
 
-Do **not** do:
-
-```powershell
-$ApiToken = ($Login | ConvertFrom-Json).session
+```cmd
+curl -i "%BASE_URL%/api/health/upstream"
 ```
 
-`Invoke-RestMethod` has already converted the JSON response into a PowerShell object.
-
-### PowerShell using curl.exe instead
-
-If you specifically want the command-line `curl` implementation:
-
-```powershell
-$BaseUrl = "https://ims-api.sidharthprabhu.co.in"
-
-$LoginBody = '{"username":"YOUR_REGISTER_NUMBER","password":"YOUR_PASSWORD"}'
-
-$LoginJson = curl.exe -s `
-    -X POST `
-    "$BaseUrl/api/auth/login" `
-    -H "Content-Type: application/json" `
-    --data-raw $LoginBody
-
-$Login = $LoginJson | ConvertFrom-Json
-
-$ApiToken = $Login.session
-
-curl.exe -s `
-    -H "Authorization: Bearer $ApiToken" `
-    "$BaseUrl/api/student/results?semester=1"
+```cmd
+curl -i -X POST "%BASE_URL%/api/auth/login" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"username\":\"YOUR_REGISTER_NUMBER\",\"password\":\"YOUR_PASSWORD\"}"
 ```
 
-Here `ConvertFrom-Json` is correct because `curl.exe` returns the response as a JSON string.
+After copying the returned session token:
 
+```cmd
+curl -i ^
+  -H "Authorization: Bearer %API_TOKEN%" ^
+  "%BASE_URL%/api/student/results?semester=1"
+```
+
+The client should receive JSON containing the requested data, not the upstream IMS login HTML.
