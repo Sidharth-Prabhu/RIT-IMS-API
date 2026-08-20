@@ -165,6 +165,26 @@ export interface FeeYearItem {
   isFullyPaid: boolean;
 }
 
+export interface AcademicFeeHistoryItem {
+  name: string;
+  history_id: string;
+  paid_amt: number;
+  paid_date: string;
+  payment_mode: string;
+  status: string;
+  transaction_id: string;
+  bank_ref_id: string;
+  via: string;
+  receipt_status: number;
+}
+
+export interface ConsolidatedReceiptItem {
+  id: string;
+  academic_year: string;
+  total_fee: string;
+  paid_fee: string;
+}
+
 export interface AcademicFeeData {
   admittedMode: string;
   isFirstGraduate: boolean;
@@ -176,6 +196,8 @@ export interface AcademicFeeData {
   totalFeeAmount: number;
   totalPaidAmount: number;
   totalPendingAmount: number;
+  history?: Record<string, AcademicFeeHistoryItem[]>;
+  consolidated?: ConsolidatedReceiptItem[];
 }
 
 export interface AcademicData {

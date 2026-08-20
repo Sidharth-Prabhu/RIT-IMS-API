@@ -916,6 +916,48 @@ export async function fetchAcademicFee(csrfToken: string): Promise<AcademicFeeDa
       };
     });
 
+    // Fetch History
+    let history = {};
+    try {
+      const historyRes = await fetch('/ims/admin/fee-details/get-history', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'X-CSRF-TOKEN': csrfToken,
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+      });
+      if (historyRes.ok) {
+        const histRaw = await historyRes.json();
+        if (histRaw.status && histRaw.data) {
+          history = histRaw.data;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch academic fee history:', e);
+    }
+
+    // Fetch Consolidated Receipts
+    let consolidated = [];
+    try {
+      const consolidatedRes = await fetch('/ims/admin/fee-details/get-consolidated-receipts', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'X-CSRF-TOKEN': csrfToken,
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+      });
+      if (consolidatedRes.ok) {
+        const consRaw = await consolidatedRes.json();
+        if (consRaw.status && consRaw.data) {
+          consolidated = consRaw.data;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch academic fee consolidated receipts:', e);
+    }
+
     return {
       admittedMode: data.admitted_mode || 'GENERAL',
       isFirstGraduate: data.first_graduate === '1',
@@ -927,6 +969,8 @@ export async function fetchAcademicFee(csrfToken: string): Promise<AcademicFeeDa
       totalFeeAmount,
       totalPaidAmount,
       totalPendingAmount,
+      history,
+      consolidated
     };
   } catch (err) {
     console.error('Failed to fetch academic fee:', err);

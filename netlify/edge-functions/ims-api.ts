@@ -924,5 +924,131 @@ export default async (request: Request, context: Context) => {
     }
   }
 
+  // 12.1. Fee History and Consolidated Receipts List Endpoint
+  if (path === "/api/student/fees/history" && request.method === "GET") {
+    const headers = getUpstreamHeaders(session.cookies, session.csrfToken);
+    headers.set("X-Requested-With", "XMLHttpRequest");
+    headers.set("Content-Type", "application/x-www-form-urlencoded");
+
+    try {
+      // 1. Fetch history
+      const historyRes = await fetch("https://ims.ritchennai.edu.in/admin/fee-details/get-history", {
+        method: "POST",
+        headers
+      });
+      const historyText = await historyRes.text();
+      if (!checkSessionValidity(historyText, historyRes)) {
+        return errorResponse("IMS_SESSION_EXPIRED", "The upstream IMS session has expired. Please authenticate again.", 401);
+      }
+      const historyJson = JSON.parse(historyText);
+
+      // 2. Fetch consolidated receipts
+      const consolidatedRes = await fetch("https://ims.ritchennai.edu.in/admin/fee-details/get-consolidated-receipts", {
+        method: "POST",
+        headers
+      });
+      const consolidatedText = await consolidatedRes.text();
+      const consolidatedJson = JSON.parse(consolidatedText);
+
+      return jsonResponse({
+        success: true,
+        data: {
+          history: historyJson.status && historyJson.data ? historyJson.data : {},
+          consolidated: consolidatedJson.status && consolidatedJson.data ? consolidatedJson.data : []
+        }
+      }, 200, corsHeaders);
+
+    } catch (err: any) {
+      return errorResponse("UPSTREAM_ERROR", `Failed to retrieve fee history: ${err.message}`, 502);
+    }
+  }
+
+  // 12.2. Fee Receipt Download Endpoint
+  if (path === "/api/student/fees/download-receipt" && request.method === "GET") {
+    const historyId = url.searchParams.get("history_id") || "";
+    if (!historyId) {
+      return errorResponse("INVALID_REQUEST", "Missing history_id parameter.", 400);
+    }
+
+    const headers = getUpstreamHeaders(session.cookies);
+    try {
+      const receiptRes = await fetch(`https://ims.ritchennai.edu.in/admin/fee-details/download-receipt/${historyId}`, {
+        method: "GET",
+        headers
+      });
+
+      if (!receiptRes.ok) {
+        return errorResponse("UPSTREAM_ERROR", `Upstream returned status ${receiptRes.status}`, 502);
+      }
+
+      if (receiptRes.url.includes("/login")) {
+        return errorResponse("IMS_SESSION_EXPIRED", "The upstream IMS session has expired. Please authenticate again.", 401);
+      }
+
+      const receiptBuffer = await receiptRes.arrayBuffer();
+
+      const resHeaders = new Headers(corsHeaders);
+      resHeaders.set("Content-Type", "application/pdf");
+      resHeaders.set("Content-Disposition", `attachment; filename="fee_receipt_${historyId.slice(0, 8)}.pdf"`);
+      resHeaders.set("Cache-Control", "no-store");
+
+      return new Response(receiptBuffer, {
+        status: 200,
+        headers: resHeaders
+      });
+
+    } catch (err: any) {
+      return errorResponse("UPSTREAM_UNAVAILABLE", `Failed to retrieve receipt: ${err.message}`, 502);
+    }
+  }
+
+  // 12.3. Consolidated Fee Receipt Download Endpoint
+  if (path === "/api/student/fees/download-consolidated-receipt" && request.method === "GET") {
+    const id = url.searchParams.get("id") || "";
+    if (!id) {
+      return errorResponse("INVALID_REQUEST", "Missing id parameter.", 400);
+    }
+
+    const headers = getUpstreamHeaders(session.cookies);
+    try {
+      // Try plural endpoint first
+      let receiptRes = await fetch(`https://ims.ritchennai.edu.in/admin/fee-details/download-consolidated-receipts/${id}`, {
+        method: "GET",
+        headers
+      });
+
+      // If plural returns error/404, try singular endpoint
+      if (!receiptRes.ok || receiptRes.status === 404) {
+        receiptRes = await fetch(`https://ims.ritchennai.edu.in/admin/fee-details/download-consolidated-receipt/${id}`, {
+          method: "GET",
+          headers
+        });
+      }
+
+      if (!receiptRes.ok) {
+        return errorResponse("UPSTREAM_ERROR", `Upstream returned status ${receiptRes.status}`, 502);
+      }
+
+      if (receiptRes.url.includes("/login")) {
+        return errorResponse("IMS_SESSION_EXPIRED", "The upstream IMS session has expired. Please authenticate again.", 401);
+      }
+
+      const receiptBuffer = await receiptRes.arrayBuffer();
+
+      const resHeaders = new Headers(corsHeaders);
+      resHeaders.set("Content-Type", "application/pdf");
+      resHeaders.set("Content-Disposition", `attachment; filename="consolidated_receipt_${id.slice(0, 8)}.pdf"`);
+      resHeaders.set("Cache-Control", "no-store");
+
+      return new Response(receiptBuffer, {
+        status: 200,
+        headers: resHeaders
+      });
+
+    } catch (err: any) {
+      return errorResponse("UPSTREAM_UNAVAILABLE", `Failed to retrieve consolidated receipt: ${err.message}`, 502);
+    }
+  }
+
   return errorResponse("NOT_FOUND", "API endpoint not found.", 404);
 };

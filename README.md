@@ -229,6 +229,65 @@ curl -s -H "Authorization: Bearer %API_TOKEN%" ^
   -o exam_receipt.pdf
 ```
 
+#### L. Academic Fee History & Consolidated Receipts List
+Retrieves full academic fee history logs and available consolidated receipts:
+- **Endpoint**: `GET /api/student/fees/history`
+
+```bash
+curl -s -H "Authorization: Bearer $API_TOKEN" \
+  "https://ims-api.sidharthprabhu.co.in/api/student/fees/history"
+```
+
+#### M. Download Academic Fee Receipt
+Retrieves the binary payment receipt PDF for a past academic fee transaction:
+- **Endpoint**: `GET /api/student/fees/download-receipt?history_id=X`
+
+##### Mac / Linux (Bash/Zsh)
+```bash
+curl -s -H "Authorization: Bearer $API_TOKEN" \
+  "https://ims-api.sidharthprabhu.co.in/api/student/fees/download-receipt?history_id=YOUR_HISTORY_ID" \
+  -o academic_receipt.pdf
+```
+
+##### Windows PowerShell
+```powershell
+curl.exe -s -H "Authorization: Bearer $env:API_TOKEN" `
+  "https://ims-api.sidharthprabhu.co.in/api/student/fees/download-receipt?history_id=YOUR_HISTORY_ID" `
+  -o academic_receipt.pdf
+```
+
+##### Windows Command Prompt (CMD)
+```cmd
+curl -s -H "Authorization: Bearer %API_TOKEN%" ^
+  "https://ims-api.sidharthprabhu.co.in/api/student/fees/download-receipt?history_id=YOUR_HISTORY_ID" ^
+  -o academic_receipt.pdf
+```
+
+#### N. Download Consolidated Academic Fee Receipt
+Retrieves the binary consolidated academic fee receipt PDF:
+- **Endpoint**: `GET /api/student/fees/download-consolidated-receipt?id=X`
+
+##### Mac / Linux (Bash/Zsh)
+```bash
+curl -s -H "Authorization: Bearer $API_TOKEN" \
+  "https://ims-api.sidharthprabhu.co.in/api/student/fees/download-consolidated-receipt?id=YOUR_CONSOLIDATED_ID" \
+  -o consolidated_receipt.pdf
+```
+
+##### Windows PowerShell
+```powershell
+curl.exe -s -H "Authorization: Bearer $env:API_TOKEN" `
+  "https://ims-api.sidharthprabhu.co.in/api/student/fees/download-consolidated-receipt?id=YOUR_CONSOLIDATED_ID" `
+  -o consolidated_receipt.pdf
+```
+
+##### Windows Command Prompt (CMD)
+```cmd
+curl -s -H "Authorization: Bearer %API_TOKEN%" ^
+  "https://ims-api.sidharthprabhu.co.in/api/student/fees/download-consolidated-receipt?id=YOUR_CONSOLIDATED_ID" ^
+  -o consolidated_receipt.pdf
+```
+
 ---
 
 ### 2.3 Diagnostics / Health

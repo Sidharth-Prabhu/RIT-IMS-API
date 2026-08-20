@@ -126,6 +126,57 @@ export default function Dashboard({ session, onLoadSemester, onLoadCatMarks, onL
     }
   };
 
+  const handleDownloadAcademicReceipt = async (historyId: string) => {
+    setReceiptDownloading(historyId);
+    try {
+      const res = await fetch(`/ims/admin/fee-details/download-receipt/${historyId}`, {
+        credentials: 'same-origin'
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `academic_receipt_${historyId.slice(0, 8)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(`Failed to download receipt: ${err.message}`);
+    } finally {
+      setReceiptDownloading(null);
+    }
+  };
+
+  const handleDownloadConsolidatedReceipt = async (id: string) => {
+    setReceiptDownloading(id);
+    try {
+      let res = await fetch(`/ims/admin/fee-details/download-consolidated-receipts/${id}`, {
+        credentials: 'same-origin'
+      });
+      if (!res.ok) {
+        res = await fetch(`/ims/admin/fee-details/download-consolidated-receipt/${id}`, {
+          credentials: 'same-origin'
+        });
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `consolidated_receipt_${id.slice(0, 8)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(`Failed to download consolidated receipt: ${err.message}`);
+    } finally {
+      setReceiptDownloading(null);
+    }
+  };
+
   const handleDownloadPDF = async (semNum: number) => {
     setPdfDownloading(true);
     try {
@@ -1102,6 +1153,119 @@ export default function Dashboard({ session, onLoadSemester, onLoadCatMarks, onL
                       </div>
                     </div>
                   ))}
+
+                  {/* Payment History */}
+                  <h3 style={{ fontSize: '18px', fontWeight: 700, marginTop: '24px', marginBottom: '16px' }}>Payment & Receipt History</h3>
+                  {session.feeData.history && Object.keys(session.feeData.history).length > 0 ? (
+                    <div className="glass-panel" style={{ padding: '20px', overflowX: 'auto', marginBottom: '24px' }}>
+                      <table className="cat-table">
+                        <thead>
+                          <tr>
+                            <th>Academic Year</th>
+                            <th>Paid Amount</th>
+                            <th>Payment Date</th>
+                            <th>Transaction / Bank Ref ID</th>
+                            <th>Mode</th>
+                            <th className="text-center">Receipt</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Object.entries(session.feeData.history).map(([yearName, historyItems]) =>
+                            historyItems.map((item, idx) => (
+                              <tr key={`${yearName}-${idx}`}>
+                                <td style={{ fontWeight: 600 }}>{yearName}</td>
+                                <td className="font-mono" style={{ color: '#22c55e', fontWeight: 700 }}>₹{item.paid_amt.toLocaleString('en-IN')}</td>
+                                <td>{item.paid_date}</td>
+                                <td>
+                                  <div style={{ fontSize: '13px' }}>Txn: <span className="font-mono">{item.transaction_id || '—'}</span></div>
+                                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Ref: <span className="font-mono">{item.bank_ref_id || '—'}</span></div>
+                                </td>
+                                <td>
+                                  <span className="profile-badge-pill profile-badge-reg" style={{ fontSize: '11px' }}>{item.payment_mode}</span>
+                                </td>
+                                <td className="text-center">
+                                  {item.history_id ? (
+                                    <button
+                                      onClick={() => handleDownloadAcademicReceipt(item.history_id)}
+                                      disabled={receiptDownloading === item.history_id}
+                                      className="btn-ghost-sm"
+                                      style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', border: '1px solid rgba(255,255,255,0.08)' }}
+                                    >
+                                      {receiptDownloading === item.history_id ? (
+                                        <Loader2 size={12} className="animate-spin" />
+                                      ) : (
+                                        <FileText size={12} />
+                                      )}
+                                      Download
+                                    </button>
+                                  ) : (
+                                    <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>N/A</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="prompt-card" style={{ padding: '24px', marginBottom: '24px' }}>
+                      <AlertCircle size={28} className="prompt-icon" />
+                      <h3>No Payment History</h3>
+                      <p>No past academic fee payment transaction records were found for your account.</p>
+                    </div>
+                  )}
+
+                  {/* Consolidated Receipts */}
+                  <h3 style={{ fontSize: '18px', fontWeight: 700, marginTop: '24px', marginBottom: '16px' }}>Consolidated Receipts</h3>
+                  {session.feeData.consolidated && session.feeData.consolidated.length > 0 ? (
+                    <div className="glass-panel" style={{ padding: '20px', overflowX: 'auto', marginBottom: '24px' }}>
+                      <table className="cat-table">
+                        <thead>
+                          <tr>
+                            <th>Academic Year</th>
+                            <th>Total Fee</th>
+                            <th>Paid Fee</th>
+                            <th className="text-center">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {session.feeData.consolidated.map((receipt, idx) => (
+                            <tr key={idx}>
+                              <td style={{ fontWeight: 600 }}>{receipt.academic_year}</td>
+                              <td className="font-mono">₹{Number(receipt.total_fee).toLocaleString('en-IN')}</td>
+                              <td className="font-mono" style={{ color: '#22c55e', fontWeight: 700 }}>₹{Number(receipt.paid_fee).toLocaleString('en-IN')}</td>
+                              <td className="text-center">
+                                {receipt.id ? (
+                                  <button
+                                    onClick={() => handleDownloadConsolidatedReceipt(receipt.id)}
+                                    disabled={receiptDownloading === receipt.id}
+                                    className="btn-ghost-sm"
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', border: '1px solid rgba(255,255,255,0.08)' }}
+                                  >
+                                    {receiptDownloading === receipt.id ? (
+                                      <Loader2 size={12} className="animate-spin" />
+                                    ) : (
+                                      <FileText size={12} />
+                                    )}
+                                    Download Consolidated PDF
+                                  </button>
+                                ) : (
+                                  <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>N/A</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="prompt-card" style={{ padding: '24px', marginBottom: '24px' }}>
+                      <AlertCircle size={28} className="prompt-icon" />
+                      <h3>No Consolidated Receipts</h3>
+                      <p>No consolidated academic fee receipt PDFs are available for download at this time.</p>
+                    </div>
+                  )}
                 </div>
               )}
 
