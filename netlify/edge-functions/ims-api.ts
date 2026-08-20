@@ -244,6 +244,7 @@ export default async (request: Request, context: Context) => {
       const authenticatedCsrf = reportDoc.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "";
 
       // Step C.2: Fetch the main admin dashboard to parse metrics
+      let timetablePath = "/admin/student-time-table";
       let dashboardStats = { cgpa: "N/A", arrears: "N/A", attendance: "N/A", pendingFees: "N/A" };
       try {
         const adminRes = await fetch("https://ims.ritchennai.edu.in/admin", {
@@ -252,6 +253,11 @@ export default async (request: Request, context: Context) => {
         if (adminRes.ok) {
           const adminHtml = await adminRes.text();
           const adminDoc = parse(adminHtml);
+          
+          const ttLink = adminDoc.querySelector('a[href*="student-time-table"]');
+          if (ttLink) {
+            timetablePath = (ttLink.getAttribute("href") || "").replace("https://ims.ritchennai.edu.in", "");
+          }
           
           const extractMetric = (labelRegex: RegExp, valueRegex: RegExp): string => {
             const elements = adminDoc.querySelectorAll("p, span, h3, h4, h1, td, th, b, strong, li, div");
@@ -357,6 +363,7 @@ export default async (request: Request, context: Context) => {
         cookies: finalCookies,
         csrfToken: authenticatedCsrf,
         username,
+        timetablePath,
         createdAt: Date.now()
       };
       const apiToken = await encryptSession(sessionData);
@@ -570,7 +577,8 @@ export default async (request: Request, context: Context) => {
 
   // 7. Timetable Endpoint
   if (path === "/api/student/timetable" && request.method === "GET") {
-    const { html, error } = await fetchUpstream("/admin/student-time-table");
+    const ttPath = session.timetablePath || "/admin/student-time-table";
+    const { html, error } = await fetchUpstream(ttPath);
     if (error) return error;
 
     const doc = parse(html);
