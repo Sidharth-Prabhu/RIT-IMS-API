@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 5173,
+    host: '0.0.0.0', port: 2300, allowedHosts: true,
     proxy: {
       '/ims': {
         target: 'https://ims.ritchennai.edu.in',

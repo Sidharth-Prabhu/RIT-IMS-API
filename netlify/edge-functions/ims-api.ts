@@ -852,6 +852,9 @@ export default async (request: Request, context: Context) => {
         headers
       });
 
+      if (!receiptRes) {
+        return errorResponse("UPSTREAM_ERROR", "Upstream returned no response", 502);
+      }
       if (!receiptRes.ok) {
         return errorResponse("UPSTREAM_ERROR", `Upstream returned status ${receiptRes.status}`, 502);
       }
@@ -977,6 +980,9 @@ export default async (request: Request, context: Context) => {
         headers
       });
 
+      if (!receiptRes) {
+        return errorResponse("UPSTREAM_ERROR", "Upstream returned no response", 502);
+      }
       if (!receiptRes.ok) {
         return errorResponse("UPSTREAM_ERROR", `Upstream returned status ${receiptRes.status}`, 502);
       }
@@ -1011,20 +1017,23 @@ export default async (request: Request, context: Context) => {
 
     const headers = getUpstreamHeaders(session.cookies);
     try {
-      // Try plural endpoint first
-      let receiptRes = await fetch(`https://ims.ritchennai.edu.in/admin/fee-details/download-consolidated-receipts/${id}`, {
-        method: "GET",
-        headers
-      });
-
-      // If plural returns error/404, try singular endpoint
-      if (!receiptRes.ok || receiptRes.status === 404) {
-        receiptRes = await fetch(`https://ims.ritchennai.edu.in/admin/fee-details/download-consolidated-receipt/${id}`, {
-          method: "GET",
-          headers
-        });
+      const endpoints = [
+        'https://ims.ritchennai.edu.in/admin/fee-details/download-consolidate-receipts',
+        'https://ims.ritchennai.edu.in/admin/fee-details/download-consolidate-receipt',
+        'https://ims.ritchennai.edu.in/admin/fee-details/download-consolidated-receipts',
+        'https://ims.ritchennai.edu.in/admin/fee-details/download-consolidated-receipt'
+      ];
+      
+      let receiptRes = null;
+      for (const endpoint of endpoints) {
+        const url = id.startsWith('?') ? `${endpoint}${id}` : `${endpoint}/${id}`;
+        receiptRes = await fetch(url, { method: "GET", headers });
+        if (receiptRes.ok && receiptRes.status !== 404) break;
       }
 
+      if (!receiptRes) {
+        return errorResponse("UPSTREAM_ERROR", "Upstream returned no response", 502);
+      }
       if (!receiptRes.ok) {
         return errorResponse("UPSTREAM_ERROR", `Upstream returned status ${receiptRes.status}`, 502);
       }

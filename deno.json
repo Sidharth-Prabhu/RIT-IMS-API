@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "@netlify/edge-functions": "data:text/javascript,export {}"
+  }
+}

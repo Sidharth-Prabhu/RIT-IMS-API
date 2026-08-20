@@ -109,6 +109,7 @@ export default function Dashboard({ session, onLoadSemester, onLoadCatMarks, onL
       const res = await fetch(`/ims/admin/exam-fee-details/download-receipt/${historyId}`, {
         credentials: 'same-origin'
       });
+      if (!res) throw new Error('HTTP unknown');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
@@ -132,6 +133,7 @@ export default function Dashboard({ session, onLoadSemester, onLoadCatMarks, onL
       const res = await fetch(`/ims/admin/fee-details/download-receipt/${historyId}`, {
         credentials: 'same-origin'
       });
+      if (!res) throw new Error('HTTP unknown');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
@@ -152,14 +154,20 @@ export default function Dashboard({ session, onLoadSemester, onLoadCatMarks, onL
   const handleDownloadConsolidatedReceipt = async (id: string) => {
     setReceiptDownloading(id);
     try {
-      let res = await fetch(`/ims/admin/fee-details/download-consolidated-receipts/${id}`, {
-        credentials: 'same-origin'
-      });
-      if (!res.ok) {
-        res = await fetch(`/ims/admin/fee-details/download-consolidated-receipt/${id}`, {
-          credentials: 'same-origin'
-        });
+      const endpoints = [
+        '/ims/admin/fee-details/download-consolidate-receipts',
+        '/ims/admin/fee-details/download-consolidate-receipt',
+        '/ims/admin/fee-details/download-consolidated-receipts',
+        '/ims/admin/fee-details/download-consolidated-receipt'
+      ];
+      
+      let res = null;
+      for (const endpoint of endpoints) {
+        const url = id.startsWith('?') ? `${endpoint}${id}` : `${endpoint}/${id}`;
+        res = await fetch(url, { credentials: 'same-origin' });
+        if (res.ok) break;
       }
+      if (!res) throw new Error('HTTP unknown');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
@@ -183,6 +191,7 @@ export default function Dashboard({ session, onLoadSemester, onLoadCatMarks, onL
       const res = await fetch(`/ims/admin/grade/student/mark/report/download/${semNum}`, {
         credentials: 'same-origin'
       });
+      if (!res) throw new Error('HTTP unknown');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
