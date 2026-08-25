@@ -693,6 +693,163 @@ export default async (request: Request, context: Context) => {
     return jsonResponse({ success: true, data: { schedule } }, 200, corsHeaders);
   }
 
+  
+  // 7.1.4. Faculty/Staff Attendance Subjects Endpoint
+  if ((path === "/api/faculty/attendance-subjects" || path === "/api/staff/attendance-subjects") && request.method === "GET") {
+    const { html, error } = await fetchUpstream("/admin/student-period-attendance/index");
+    if (error) return error;
+
+    const doc = parse(html);
+    
+    const parseTable = (tbodyId: string) => {
+      const tbody = doc.querySelector(tbodyId);
+      if (!tbody) return [];
+      const rows = tbody.querySelectorAll("tr");
+      const result: any[] = [];
+      for (const row of rows) {
+        const cells = row.querySelectorAll("td");
+        if (cells.length >= 5) {
+          const serialNo = cells[0].textContent?.trim() || "";
+          if (serialNo === "No Date Available" || serialNo === "No Data Available...") continue;
+          
+          const allotedPeriod = cells[1].textContent?.trim() || "";
+          const subject = cells[2].textContent?.trim() || "";
+          const className = cells[3].textContent?.trim() || "";
+          
+          const actionHtml = cells[4].innerHTML;
+          
+          let params = {};
+          const match = actionHtml.match(/openModal\([^,]+,\s*"Take Attendance",\s*([^,]+),\s*(\[[^\]]+\]),\s*(\[[^\]]+\]),\s*"([^"]+)",\s*"([^"]+)",\s*([^,]+),\s*([^,]+),\s*([^)]+)\)/);
+          if (match) {
+            try {
+              params = {
+                subjectId: JSON.parse(match[1]),
+                periods: JSON.parse(match[2]),
+                classes: JSON.parse(match[3]),
+                date: match[4],
+                subjectName: match[5],
+                regularSub: JSON.parse(match[6]),
+                specialSub: JSON.parse(match[7]),
+                staffId: JSON.parse(match[8])
+              };
+            } catch(e) {}
+          }
+    
+          result.push({
+            serialNo: parseInt(serialNo, 10),
+            allotedPeriod,
+            subject,
+            className,
+            params
+          });
+        }
+      }
+      return result;
+    };
+
+    return jsonResponse({
+      success: true,
+      data: {
+        regularSubjects: parseTable("#regularSubjects"),
+        assignedSubjects: parseTable("#assignedSubjects")
+      }
+    }, 200, corsHeaders);
+  }
+
+  // 7.1.5. Faculty/Staff Subjects Endpoint
+  if ((path === "/api/faculty/subjects" || path === "/api/staff/subjects") && request.method === "GET") {
+    const { html, error } = await fetchUpstream("/admin/staff-subjects/index");
+    if (error) return error;
+
+    const doc = parse(html);
+    const subjects: any[] = [];
+    const table = doc.querySelector("table");
+
+    if (table) {
+      table.querySelectorAll("tbody tr").forEach(row => {
+        const cells = row.querySelectorAll("td");
+        if (cells.length >= 3) {
+          const serialNo = parseInt(cells[0].textContent?.trim() || "0", 10);
+          const className = cells[1].textContent?.trim() || "";
+          const rawSubject = cells[2].textContent?.trim() || "";
+
+          if (className || rawSubject) {
+            let subjectName = rawSubject;
+            let subjectCode = "";
+            const subMatch = rawSubject.match(/^(.*?)\s*\(([^)]+)\)$/s);
+            if (subMatch) {
+              subjectName = subMatch[1].trim();
+              subjectCode = subMatch[2].trim();
+            }
+
+            subjects.push({ serialNo, className, subjectName, subjectCode });
+          }
+        }
+      });
+    }
+
+    return jsonResponse({ success: true, data: { subjects } }, 200, corsHeaders);
+  }
+
+  // 7.1.6. Faculty/Staff Past Subjects Endpoint
+  if ((path === "/api/faculty/subjects/past" || path === "/api/staff/subjects/past") && (request.method === "GET" || request.method === "POST")) {
+    let pastAy = "";
+    let pastSemester = "";
+
+    if (request.method === "POST") {
+      try {
+        const json = await request.json();
+        pastAy = String(json.academic_year || json.past_ay || "");
+        pastSemester = String(json.semester || json.past_semester || "");
+      } catch (_e) {
+        return errorResponse("INVALID_REQUEST", "Invalid JSON payload.", 400);
+      }
+    } else {
+      pastAy = url.searchParams.get("academic_year") || url.searchParams.get("past_ay") || "";
+      pastSemester = url.searchParams.get("semester") || url.searchParams.get("past_semester") || "";
+    }
+
+    if (!pastAy || !pastSemester) {
+      return errorResponse("INVALID_REQUEST", "academic_year and semester are required.", 400);
+    }
+
+    const { html, error } = await fetchUpstream("/admin/staff-subjects/get-past-records", "POST", {
+      past_ay: pastAy,
+      past_semester: pastSemester
+    });
+    if (error) return error;
+
+    try {
+      const raw = JSON.parse(html);
+      if (raw.status === true && Array.isArray(raw.data)) {
+        const subjects = raw.data.map((item: any, index: number) => {
+          const className = item[0] || "";
+          let subjectName = item[1] || "";
+          let subjectCode = item[2] || "";
+
+          // Clean names / codes if they have trailing whitespace
+          subjectName = subjectName.trim();
+          if (subjectCode) {
+            subjectCode = subjectCode.trim();
+          }
+
+          return {
+            serialNo: index + 1,
+            className,
+            subjectName,
+            subjectCode
+          };
+        });
+
+        return jsonResponse({ success: true, data: { subjects } }, 200, corsHeaders);
+      } else {
+        return jsonResponse({ success: false, error: "NO_DATA", message: typeof raw.data === "string" ? raw.data : "No data available for the selected AY and Semester." }, 200, corsHeaders);
+      }
+    } catch (_e) {
+      return errorResponse("UPSTREAM_ERROR", "Failed to parse archived subjects data from upstream.", 502);
+    }
+  }
+
   // 7.2. Faculty/Staff Profile Endpoint
   if ((path === "/api/faculty/profile" || path === "/api/staff/profile") && request.method === "GET") {
     const headers = getUpstreamHeaders(session.cookies);

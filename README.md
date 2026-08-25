@@ -360,6 +360,123 @@ curl -s -H "Authorization: Bearer $API_TOKEN" \
 }
 ```
 
+#### C. Fetch Faculty/Staff Subjects
+Retrieves the logged-in staff member's registered/taught subjects:
+- **Endpoint**: `GET /api/faculty/subjects` (or `/api/staff/subjects`)
+
+```bash
+curl -s -H "Authorization: Bearer $API_TOKEN" \
+  "https://ims-api.sidharthprabhu.co.in/api/faculty/subjects"
+```
+**Example Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "subjects": [
+      {
+        "serialNo": 1,
+        "className": "B.E. CSE (AI & ML)/5/A",
+        "subjectName": "Business Analytics",
+        "subjectCode": "CB23531"
+      },
+      {
+        "serialNo": 2,
+        "className": "B.E. CSE (AI & ML)/5/C",
+        "subjectName": "Natural Language Processing",
+        "subjectCode": "AL23531"
+      },
+      {
+        "serialNo": 3,
+        "className": "M. Tech (D S)/3/A",
+        "subjectName": "AI Powered Chat Bot",
+        "subjectCode": "DS23007"
+      }
+    ]
+  }
+}
+```
+
+#### D. Fetch Past Archived Subjects
+Retrieves the logged-in staff member's archived subjects taught in a past Academic Year and Semester:
+- **Endpoint**: `GET /api/faculty/subjects/past?academic_year=AY&semester=SEM` or `POST /api/faculty/subjects/past` (or `/api/staff/subjects/past`)
+
+##### GET request example:
+```bash
+curl -s -H "Authorization: Bearer $API_TOKEN" \
+  "https://ims-api.sidharthprabhu.co.in/api/faculty/subjects/past?academic_year=2026-2027&semester=5"
+```
+
+##### POST request example:
+```bash
+curl -s -X POST "https://ims-api.sidharthprabhu.co.in/api/faculty/subjects/past" \
+  -H "Authorization: Bearer $API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "academic_year": "2026-2027",
+    "semester": "5"
+  }'
+```
+
+**Example Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "subjects": [
+      {
+        "serialNo": 1,
+        "className": "B.E. CSE (AI & ML) / 5 / A",
+        "subjectName": "Business Analytics",
+        "subjectCode": "CB23531"
+      },
+      {
+        "serialNo": 2,
+        "className": "B.E. CSE (AI & ML) / 5 / C",
+        "subjectName": "Natural Language Processing",
+        "subjectCode": "AL23531"
+      }
+    ]
+  }
+}
+```
+
+#### E. Fetch Attendance Subjects
+Retrieves the daily subjects for which the logged-in staff member needs to mark student attendance:
+- **Endpoint**: `GET /api/faculty/attendance-subjects` (or `/api/staff/attendance-subjects`)
+
+```bash
+curl -s -H "Authorization: Bearer $API_TOKEN" \
+  "https://ims-api.sidharthprabhu.co.in/api/faculty/attendance-subjects"
+```
+**Example Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "regularSubjects": [
+      {
+        "serialNo": 1,
+        "allotedPeriod": "3",
+        "subject": "AI Powered Chat Bot (DS23007 )",
+        "className": "M. Tech (D S)/3/A",
+        "params": {
+          "subjectId": 994,
+          "periods": ["3"],
+          "classes": ["1411"],
+          "date": "2026-08-25",
+          "subjectName": "AI Powered Chat Bot (DS23007 )",
+          "regularSub": 1,
+          "specialSub": 0,
+          "staffId": 6429
+        }
+      }
+    ],
+    "assignedSubjects": []
+  }
+}
+```
+
 ---
 
 ### 2.4 Diagnostics / Health
