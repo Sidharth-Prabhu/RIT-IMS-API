@@ -227,33 +227,33 @@ export default async (request: Request, context: Context) => {
       const authCookies = { ...getCookies, ...parseSetCookies(authRes.headers.getSetCookie?.() || []) };
 
       // Step C: Request dashboard to retrieve the authenticated CSRF token & verify access
-      const reportHeaders = getUpstreamHeaders(authCookies);
-      const reportRes = await fetch("https://ims.ritchennai.edu.in/admin/grade/student/mark/report", {
-        headers: reportHeaders
+      const adminHeaders = getUpstreamHeaders(authCookies);
+      const adminRes = await fetch("https://ims.ritchennai.edu.in/admin", {
+        headers: adminHeaders
       });
 
-      const reportHtml = await reportRes.text();
-      const reportDoc = parse(reportHtml);
+      const adminHtml = await adminRes.text();
+      const adminDoc = parse(adminHtml);
 
       // Check if redirected or unauthenticated
-      if (reportRes.url.includes("/login") || reportHtml.includes("http-equiv=\"refresh\"") || !reportDoc.querySelector('meta[name="csrf-token"]')) {
+      if (adminRes.url.includes("/login") || adminHtml.includes("http-equiv=\"refresh\"") || !adminDoc.querySelector('meta[name="csrf-token"]')) {
         return errorResponse("INVALID_CREDENTIALS", "The IMS username or password is incorrect.", 401);
       }
 
-      const finalCookies = { ...authCookies, ...parseSetCookies(reportRes.headers.getSetCookie?.() || []) };
-      const authenticatedCsrf = reportDoc.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "";
+      const finalCookies = { ...authCookies, ...parseSetCookies(adminRes.headers.getSetCookie?.() || []) };
+      const authenticatedCsrf = adminDoc.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "";
 
-      // Step C.2: Fetch the main admin dashboard to parse metrics
+      // Determine role: student or staff
+      let role = "student";
+      if (adminHtml.includes("staff-time-table") || adminHtml.includes("teaching-staff") || adminHtml.includes("Staff-Edit")) {
+        role = "staff";
+      }
+
+      // Step C.2: Fetch the main admin dashboard to parse metrics (only for students)
       let timetablePath = "/admin/student-time-table";
       let dashboardStats = { cgpa: "N/A", arrears: "N/A", attendance: "N/A", pendingFees: "N/A" };
-      try {
-        const adminRes = await fetch("https://ims.ritchennai.edu.in/admin", {
-          headers: getUpstreamHeaders(finalCookies)
-        });
-        if (adminRes.ok) {
-          const adminHtml = await adminRes.text();
-          const adminDoc = parse(adminHtml);
-          
+      if (role === "student") {
+        try {
           const ttLink = adminDoc.querySelector('a[href*="student-time-table"]');
           if (ttLink) {
             timetablePath = (ttLink.getAttribute("href") || "").replace("https://ims.ritchennai.edu.in", "");
@@ -281,7 +281,7 @@ export default async (request: Request, context: Context) => {
                 }
                 
                 // Check direct parent wrapper
-                const parent = el.parentElement;
+                const parent = el.parentNode;
                 if (parent) {
                   const parentText = (parent.textContent || "").trim();
                   const cleanParentText = parentText.replace(text, "");
@@ -298,61 +298,77 @@ export default async (request: Request, context: Context) => {
           dashboardStats.attendance = extractMetric(/\battendance\b/i, /(\d+(?:\.\d+)?\s*%)/) || extractMetric(/\battendance\b/i, /(\d+(?:\.\d+)?)/);
           dashboardStats.pendingFees = extractMetric(/(?:pending|due|balance|academic)\s*fees?/i, /(?:Rs\.?|₹)\s*([\d,]+)/) || 
                                        extractMetric(/(?:pending|due|balance|academic)\s*fees?/i, /\b([\d,]+)\b/);
+        } catch (adminErr) {
+          console.warn("Failed to fetch dashboard metrics:", adminErr);
         }
-      } catch (adminErr) {
-        console.warn("Failed to fetch dashboard metrics:", adminErr);
       }
 
-      // Step C.3: Fetch the profile page to parse studentInfo
-      let studentInfo = { name: "Student", register_number: username, department: "", batch: "" };
+      // Step C.3: Fetch the profile page to parse studentInfo / staffInfo
+      let studentInfo = null;
+      let staffInfo = null;
       try {
-        const { html: profHtml, error: profErr } = await fetchStudentProfileHtml(finalCookies);
-        if (!profErr) {
-          const profDoc = parse(profHtml);
-          const rawFields: Record<string, string> = {};
-          const addField = (label: string, val: string) => {
-            const cleanLabel = label.replace(/:/g, "").replace(/\*/g, "").trim().toLowerCase();
-            const cleanVal = val.trim();
-            if (cleanLabel && cleanVal && cleanLabel !== "_token") {
-              rawFields[cleanLabel] = cleanVal;
+        const profileLinkEl = adminDoc.querySelector('a[href*="Profile-view"]');
+        let profilePath = "";
+        if (profileLinkEl) {
+          profilePath = (profileLinkEl.getAttribute("href") || "").replace("https://ims.ritchennai.edu.in", "");
+        }
+        if (!profilePath) {
+          profilePath = role === "staff" ? "/admin/teaching-staff/Profile-view" : "/admin/students/Profile-view";
+        }
+
+        const profileRes = await fetch(`https://ims.ritchennai.edu.in${profilePath}`, { headers: getUpstreamHeaders(finalCookies) });
+        const profHtml = await profileRes.text();
+        const profDoc = parse(profHtml);
+        const rawFields: Record<string, string> = {};
+        const addField = (label: string, val: string) => {
+          const cleanLabel = label.replace(/:/g, "").replace(/\*/g, "").trim().toLowerCase();
+          const cleanVal = val.trim();
+          if (cleanLabel && cleanVal && cleanLabel !== "_token") {
+            rawFields[cleanLabel] = cleanVal;
+          }
+        };
+
+        profDoc.querySelectorAll("tr, dl, .profile-info-row, .row").forEach(row => {
+          const ths = row.querySelectorAll("th");
+          const tds = row.querySelectorAll("td");
+          if (ths.length > 0 && tds.length > 0 && ths.length === tds.length) {
+            for (let i = 0; i < ths.length; i++) {
+              addField(ths[i].textContent || "", tds[i].textContent || "");
             }
+          } else if (tds.length >= 2) {
+            for (let i = 0; i < tds.length - 1; i += 2) {
+              addField(tds[i].textContent || "", tds[i + 1].textContent || "");
+            }
+          }
+        });
+
+        const findField = (...keys: string[]): string => {
+          for (const k of keys) {
+            const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, "");
+            for (const [rk, rv] of Object.entries(rawFields)) {
+              const cleanRk = rk.toLowerCase().replace(/[^a-z0-9]/g, "");
+              if (cleanRk.includes(cleanK)) {
+                return rv;
+              }
+            }
+          }
+          return "";
+        };
+
+        if (role === "staff") {
+          staffInfo = {
+            name: findField("name", "fullname") || "Staff",
+            employee_id: findField("employee", "staffid", "username") || username,
+            department: findField("department", "branch", "course") || "",
+            designation: findField("designation", "role") || ""
           };
-
-          profDoc.querySelectorAll("tr, dl, .profile-info-row, .row").forEach(row => {
-            const ths = row.querySelectorAll("th");
-            const tds = row.querySelectorAll("td");
-            if (ths.length > 0 && tds.length > 0 && ths.length === tds.length) {
-              for (let i = 0; i < ths.length; i++) {
-                addField(ths[i].textContent || "", tds[i].textContent || "");
-              }
-            } else if (tds.length >= 2) {
-              for (let i = 0; i < tds.length - 1; i += 2) {
-                addField(tds[i].textContent || "", tds[i + 1].textContent || "");
-              }
-            }
-          });
-
-          const findField = (...keys: string[]): string => {
-            for (const k of keys) {
-              const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, "");
-              for (const [rk, rv] of Object.entries(rawFields)) {
-                const cleanRk = rk.toLowerCase().replace(/[^a-z0-9]/g, "");
-                if (cleanRk.includes(cleanK)) {
-                  return rv;
-                }
-              }
-            }
-            return "";
+        } else {
+          studentInfo = {
+            name: findField("name", "fullname") || "Student",
+            register_number: findField("register", "regno", "rollno") || username,
+            department: findField("department", "branch", "course") || "",
+            batch: findField("batch", "academicyear") || ""
           };
-
-          const pName = findField("name", "fullname");
-          if (pName) studentInfo.name = pName;
-          
-          const pDept = findField("department", "branch", "course");
-          if (pDept) studentInfo.department = pDept;
-
-          const pBatch = findField("batch", "academicyear");
-          if (pBatch) studentInfo.batch = pBatch;
         }
       } catch (profErr) {
         console.warn("Failed to fetch student profile during login:", profErr);
@@ -363,6 +379,7 @@ export default async (request: Request, context: Context) => {
         cookies: finalCookies,
         csrfToken: authenticatedCsrf,
         username,
+        role,
         timetablePath,
         createdAt: Date.now()
       };
@@ -372,8 +389,9 @@ export default async (request: Request, context: Context) => {
         success: true,
         message: "Authentication successful",
         session: apiToken,
-        studentInfo: studentInfo,
-        dashboard: dashboardStats
+        role,
+        ...(role === "staff" ? { staffInfo } : { studentInfo }),
+        dashboard: role === "staff" ? null : dashboardStats
       }, 200, corsHeaders);
 
     } catch (err: any) {
@@ -391,6 +409,15 @@ export default async (request: Request, context: Context) => {
   const session = await decryptSession(token);
   if (!session) {
     return errorResponse("IMS_SESSION_EXPIRED", "The upstream IMS session is not authenticated.", 401);
+  }
+
+  // Enforce role-based access control
+  const userRole = session.role || "student";
+  if (path.startsWith("/api/student/") && userRole !== "student") {
+    return errorResponse("FORBIDDEN", "This student endpoint is not accessible to staff accounts.", 403);
+  }
+  if ((path.startsWith("/api/faculty/") || path.startsWith("/api/staff/")) && userRole !== "staff") {
+    return errorResponse("FORBIDDEN", "This faculty endpoint is not accessible to student accounts.", 403);
   }
 
   // Helper to verify upstream response is not redirecting
@@ -462,7 +489,7 @@ export default async (request: Request, context: Context) => {
           }
           
           // Check direct parent wrapper
-          const parent = el.parentElement;
+          const parent = el.parentNode;
           if (parent) {
             const parentText = (parent.textContent || "").trim();
             const cleanParentText = parentText.replace(text, "");
@@ -623,6 +650,127 @@ export default async (request: Request, context: Context) => {
     });
 
     return jsonResponse({ success: true, data: { schedule } }, 200, corsHeaders);
+  }
+
+  // 7.1. Faculty/Staff Timetable Endpoint
+  if ((path === "/api/faculty/timetable" || path === "/api/staff/timetable") && request.method === "GET") {
+    const { html, error } = await fetchUpstream("/admin/staff-time-table/index");
+    if (error) return error;
+
+    const doc = parse(html);
+    const schedule: Record<string, Record<number, any[]>> = {
+      monday: {}, tuesday: {}, wednesday: {}, thursday: {}, friday: {}, saturday: {}
+    };
+
+    doc.querySelectorAll(".period_form").forEach(form => {
+      const dayInput = form.querySelector('input[name="day"]') as any;
+      const periodInput = form.querySelector('input[name="period"]') as any;
+      const day = (dayInput?.getAttribute("value") || "").toLowerCase().trim();
+      const period = parseInt(periodInput?.getAttribute("value") || "0", 10);
+
+      if (!day || !period || isNaN(period)) return;
+
+      let rawSubject = "";
+      let className = "";
+      const primaries = form.querySelectorAll(".text-primary");
+      if (primaries.length >= 1) rawSubject = primaries[0].textContent?.trim() || "";
+      if (primaries.length >= 2) className = primaries[1].textContent?.trim() || "";
+
+      let subjectName = rawSubject;
+      let subjectCode = "";
+      const subMatch = rawSubject.match(/^(.*?)\s*\(([^)]+)\)$/s);
+      if (subMatch) {
+        subjectName = subMatch[1].trim();
+        subjectCode = subMatch[2].trim();
+      }
+
+      if (!schedule[day]) schedule[day] = {};
+      if (!schedule[day][period]) schedule[day][period] = [];
+
+      schedule[day][period].push({ subjectName, subjectCode, className });
+    });
+
+    return jsonResponse({ success: true, data: { schedule } }, 200, corsHeaders);
+  }
+
+  // 7.2. Faculty/Staff Profile Endpoint
+  if ((path === "/api/faculty/profile" || path === "/api/staff/profile") && request.method === "GET") {
+    const headers = getUpstreamHeaders(session.cookies);
+    let profilePath = "";
+    try {
+      const adminRes = await fetch("https://ims.ritchennai.edu.in/admin", { headers });
+      const adminHtml = await adminRes.text();
+      const adminDoc = parse(adminHtml);
+      const profileLinkEl = adminDoc.querySelector('a[href*="Profile-view"]');
+      if (profileLinkEl) {
+        profilePath = (profileLinkEl.getAttribute("href") || "").replace("https://ims.ritchennai.edu.in", "");
+      }
+    } catch (_err) {
+      // ignore
+    }
+
+    if (!profilePath) {
+      profilePath = "/admin/teaching-staff/Profile-view"; // fallback
+    }
+
+    try {
+      const profileRes = await fetch(`https://ims.ritchennai.edu.in${profilePath}`, { headers });
+      const html = await profileRes.text();
+      const doc = parse(html);
+      const rawFields: Record<string, string> = {};
+
+      const addField = (label: string, val: string) => {
+        const cleanLabel = label.replace(/:/g, "").replace(/\*/g, "").trim().toLowerCase();
+        const cleanVal = val.trim();
+        if (cleanLabel && cleanVal && cleanLabel !== "_token") {
+          rawFields[cleanLabel] = cleanVal;
+        }
+      };
+
+      doc.querySelectorAll("tr, dl, .profile-info-row, .row").forEach(row => {
+        const ths = row.querySelectorAll("th");
+        const tds = row.querySelectorAll("td");
+        if (ths.length > 0 && tds.length > 0 && ths.length === tds.length) {
+          for (let i = 0; i < ths.length; i++) {
+            addField(ths[i].textContent || "", tds[i].textContent || "");
+          }
+        } else if (tds.length >= 2) {
+          for (let i = 0; i < tds.length - 1; i += 2) {
+            addField(tds[i].textContent || "", tds[i + 1].textContent || "");
+          }
+        }
+      });
+
+      const findField = (...keys: string[]): string => {
+        for (const k of keys) {
+          const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, "");
+          for (const [rk, rv] of Object.entries(rawFields)) {
+            const cleanRk = rk.toLowerCase().replace(/[^a-z0-9]/g, "");
+            if (cleanRk.includes(cleanK)) {
+              return rv;
+            }
+          }
+        }
+        return "";
+      };
+
+      const name = findField("name", "fullname") || "Staff";
+      const employee_id = findField("employee", "staffid", "username") || session.username;
+      const department = findField("department", "branch", "course") || "";
+      const designation = findField("designation", "role") || "";
+
+      return jsonResponse({
+        success: true,
+        data: {
+          name,
+          employee_id,
+          department,
+          designation
+        }
+      }, 200, corsHeaders);
+    } catch (err: any) {
+      return errorResponse("UPSTREAM_UNAVAILABLE", "Failed to retrieve staff profile.", 502);
+    }
   }
 
   // 8. CAT Marks Endpoint

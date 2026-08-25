@@ -290,7 +290,79 @@ curl -s -H "Authorization: Bearer %API_TOKEN%" ^
 
 ---
 
-### 2.3 Diagnostics / Health
+### 2.3 Faculty Data Endpoints
+
+All faculty data endpoints require your session token in the authorization header:
+`Authorization: Bearer <API_SESSION_TOKEN>`
+
+#### A. Fetch Faculty/Staff Profile
+Retrieves the logged-in staff member's profile info:
+- **Endpoint**: `GET /api/faculty/profile` (or `/api/staff/profile`)
+
+```bash
+curl -s -H "Authorization: Bearer $API_TOKEN" \
+  "https://ims-api.sidharthprabhu.co.in/api/faculty/profile"
+```
+**Example Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "name": "SHREE MAKESH N",
+    "employee_id": "6429",
+    "department": "Computer Science and Engineering",
+    "designation": "Assistant Professor"
+  }
+}
+```
+
+#### B. Fetch Faculty/Staff Timetable
+Retrieves the faculty's timetable, showing the classes and subjects taught:
+- **Endpoint**: `GET /api/faculty/timetable` (or `/api/staff/timetable`)
+
+```bash
+curl -s -H "Authorization: Bearer $API_TOKEN" \
+  "https://ims-api.sidharthprabhu.co.in/api/faculty/timetable"
+```
+**Example Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "schedule": {
+      "monday": {
+        "1": [
+          {
+            "subjectName": "AI Powered Chat Bot",
+            "subjectCode": "DS23007",
+            "className": "M. Tech (D S) / 3 / A"
+          }
+        ],
+        "2": [
+          {
+            "subjectName": "Natural Language Processing",
+            "subjectCode": "AL23531",
+            "className": "B.E. CSE (AI & ML) / 5 / C"
+          }
+        ]
+      },
+      "tuesday": {
+        "3": [
+          {
+            "subjectName": "AI Powered Chat Bot",
+            "subjectCode": "DS23007",
+            "className": "M. Tech (D S) / 3 / A"
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+---
+
+### 2.4 Diagnostics / Health
 
 #### Local Health Check
 ```bash
